@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>UAT POS Platform - Print Version</title>
+    <style>
+        :root {
+            --ink: #0f172a;
+            --muted: #475569;
+            --line: #cbd5e1;
+            --soft: #f8fafc;
+            --accent: #0f766e;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Georgia, "Times New Roman", serif;
+            color: var(--ink);
+            background: white;
+            line-height: 1.45;
+        }
+
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 28px;
+        }
+
+        .cover {
+            border: 2px solid var(--ink);
+            padding: 28px;
+            margin-bottom: 24px;
+        }
+
+        h1, h2, h3 {
+            margin: 0 0 10px 0;
+            line-height: 1.2;
+        }
+
+        h1 {
+            font-size: 28px;
+        }
+
+        h2 {
+            font-size: 20px;
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 6px;
+            margin-top: 28px;
+        }
+
+        h3 {
+            font-size: 16px;
+            margin-top: 18px;
+        }
+
+        p, li, td, th {
+            font-size: 14px;
+        }
+
+        .meta, .note {
+            color: var(--muted);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .box {
+            border: 1px solid var(--line);
+            padding: 12px 14px;
+            background: var(--soft);
+        }
+
+        ul {
+            margin: 8px 0 0 18px;
+            padding: 0;
+        }
+
+        ol {
+            margin: 8px 0 0 20px;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid var(--line);
+            padding: 8px 10px;
+            vertical-align: top;
+            text-align: left;
+        }
+
+        th {
+            background: #eef2f7;
+        }
+
+        .check td:last-child,
+        .check th:last-child {
+            width: 90px;
+            text-align: center;
+        }
+
+        .signatures {
+            margin-top: 24px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 24px;
+        }
+
+        .sign {
+            border-top: 1px solid var(--ink);
+            padding-top: 8px;
+            margin-top: 56px;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        .break {
+            page-break-before: always;
+        }
+
+        @media print {
+            .page {
+                max-width: none;
+                padding: 10mm;
+            }
+
+            .box {
+                background: white;
+            }
+
+            a {
+                color: inherit;
+                text-decoration: none;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+    <section class="cover">
+        <h1>UAT End-to-End POS Platform + POSLive</h1>
+        <p class="meta">Versi print-friendly untuk pelaksanaan UAT, pencatatan manual, dan pencocokan hasil UI dengan expected report.</p>
+        <div class="grid-2" style="margin-top: 18px;">
+            <div class="box">
+                <strong>Periode UAT</strong><br>
+                Tanggal: ____________________<br>
+                Lokasi: ____________________<br>
+                PIC: ____________________
+            </div>
+            <div class="box">
+                <strong>Cakupan Utama</strong><br>
+                Multi tenant, multi usaha, multi cabang, transaksi, promo, shift, refund, laporan, dan akuntansi.
+            </div>
+        </div>
+    </section>
+
+    <h2>Tujuan</h2>
+    <ul>
+        <li>Menguji flow dari pendaftaran tenant sampai operasional harian dan laporan akhir.</li>
+        <li>Menguji multi tenant, 2 usaha per tenant, dan 2 cabang per usaha.</li>
+        <li>Menguji transaksi, split payment, diskon, redeem, refund, shift, stok, dan laporan.</li>
+        <li>Menguji kecocokan hasil UI dengan expected report manual dan akuntansi.</li>
+    </ul>
+
+    <h2>Data Tenant UAT</h2>
+    <div class="grid-2">
+        <div class="box">
+            <h3>Tenant 1</h3>
+            <p>Nama tenant: Ayam Juara Group<br>Kode tenant: ayam-juara-group<br>Owner: ____________________<br>Email owner: ____________________<br>No. HP: ____________________</p>
+            <p><strong>Usaha</strong><br>1. Ayam Goreng Nusantara - Cabang Pusat, Timur<br>2. Ayam Geprek Rasa - Cabang Pusat, Barat</p>
+        </div>
+        <div class="box">
+            <h3>Tenant 2</h3>
+            <p>Nama tenant: Ayam Berkah Group<br>Kode tenant: ayam-berkah-group<br>Owner: ____________________<br>Email owner: ____________________<br>No. HP: ____________________</p>
+            <p><strong>Usaha</strong><br>1. Ayam Goreng Bahagia - Cabang Pusat, Selatan<br>2. Ayam Crispy Family - Cabang Pusat, Utara</p>
+        </div>
+    </div>
+
+    <h2>User UAT Minimal</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Role</th>
+                <th>Jumlah</th>
+                <th>Catatan</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Owner</td><td>1</td><td>Per tenant</td></tr>
+            <tr><td>Manager</td><td>1</td><td>Per tenant</td></tr>
+            <tr><td>Kasir</td><td>4</td><td>1 kasir untuk masing-masing cabang</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Master Data UAT</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Kategori</th>
+                <th>Harga Beli</th>
+                <th>Harga Jual</th>
+                <th>Satuan</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Ayam karkas</td><td>Raw material</td><td>45.000</td><td>-</td><td>Ekor</td></tr>
+            <tr><td>Tepung</td><td>Raw material</td><td>15.000</td><td>-</td><td>Pack</td></tr>
+            <tr><td>Aqua botol</td><td>Barang dagang</td><td>3.000</td><td>4.000</td><td>Pcs</td></tr>
+            <tr><td>Dada goreng</td><td>Barang jadi</td><td>-</td><td>12.000</td><td>Pcs</td></tr>
+            <tr><td>Paha atas goreng</td><td>Barang jadi</td><td>-</td><td>11.000</td><td>Pcs</td></tr>
+            <tr><td>Sayap goreng</td><td>Barang jadi</td><td>-</td><td>9.000</td><td>Pcs</td></tr>
+            <tr><td>Paha bawah goreng</td><td>Barang jadi</td><td>-</td><td>10.000</td><td>Pcs</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Transaksi UAT Per Cabang</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Kode</th>
+                <th>Skenario</th>
+                <th>Expected Ringkas</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>T1</td><td>Cash, dine in, total 28.000</td><td>Paid, struk tampil, label dine in</td></tr>
+            <tr><td>T2</td><td>QRIS, take away, total 22.000</td><td>Paid, metode bayar terpisah, label take away</td></tr>
+            <tr><td>T3</td><td>Cash, dine in, total 31.000</td><td>Paid, saldo kas bertambah</td></tr>
+            <tr><td>T4</td><td>Cash, take away, total 10.000 lalu refund</td><td>Status refunded, stok kembali sesuai kebijakan</td></tr>
+            <tr><td>T5</td><td>Split amount 35.000</td><td>Cash 20.000 + QRIS 15.000, omzet tidak dobel</td></tr>
+            <tr><td>T6</td><td>Split item 34.000</td><td>Bill A cash 16.000, Bill B QRIS 18.000</td></tr>
+            <tr><td>T7</td><td>Diskon minimum pembelian</td><td>Subtotal 40.000, diskon 4.000, bayar 36.000</td></tr>
+            <tr><td>T8</td><td>Redeem minimum pembelian</td><td>Subtotal 30.000, redeem 5.000, bayar 25.000</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Mode Promo Yang Diuji</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Mode</th>
+                <th>Contoh</th>
+                <th>Expected</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Promo manual dari menu voucher</td><td>NGOPI10, LUNCH25</td><td>Kode dibuat lebih dulu di menu promo, lalu dipakai saat checkout dan tampil di struk</td></tr>
+            <tr><td>Promo dari struk</td><td>COMEBACK10</td><td>Struk menghasilkan kode promo baru untuk kunjungan berikutnya bila fitur tersedia</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Campaign Promo Terjadwal</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Versi</th>
+                <th>Contoh Rule</th>
+                <th>Expected</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Gratis produk</td><td>Min. belanja 75.000 gratis 1 es teh manis, aktif jam tertentu</td><td>Benefit item gratis muncul jelas di transaksi dan struk</td></tr>
+            <tr><td>Potong harga</td><td>Min. belanja 50.000 potongan 10.000 atau 10%</td><td>Diskon total dihitung benar sesuai rule campaign</td></tr>
+            <tr><td>Voucher kecil</td><td>Kupon cetak kecil untuk dibagikan manual</td><td>Kode promo, masa berlaku, dan syarat minimum belanja tercetak hemat kertas</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Checklist Promo Lanjutan</h2>
+    <ul>
+        <li>Pastikan bila voucher otomatis dari struk aktif dan campaign terjadwal juga aktif, sistem memakai campaign aktif yang memenuhi syarat lebih dulu.</li>
+        <li>Pastikan konfigurasi default voucher dari struk menjadi fallback bila tidak ada campaign aktif yang cocok.</li>
+        <li>Pastikan voucher manual bisa dibuat tanpa transaksi atau struk.</li>
+        <li>Pastikan form voucher manual menyesuaikan metode voucher: produk gratis dan diskon produk tidak tampil bersamaan.</li>
+        <li>Pastikan setelah membuat voucher manual, halaman print kecil terbuka otomatis.</li>
+        <li>Pastikan tombol tutup di halaman print voucher kecil berfungsi kembali atau menuju daftar voucher.</li>
+    </ul>
+
+    <div class="break"></div>
+
+    <h2>Expected Hasil Per Cabang</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Komponen</th>
+                <th>Expected</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Paid transaction count</td><td>7</td></tr>
+            <tr><td>Refunded transaction count</td><td>1</td></tr>
+            <tr><td>Omzet paid</td><td>211.000</td></tr>
+            <tr><td>Refund</td><td>10.000</td></tr>
+            <tr><td>Cash paid</td><td>131.000</td></tr>
+            <tr><td>QRIS paid</td><td>80.000</td></tr>
+            <tr><td>Saldo akhir laci</td><td>371.000</td></tr>
+            <tr><td>Dine in</td><td>4 transaksi</td></tr>
+            <tr><td>Take away</td><td>4 transaksi</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Expected Stok Akhir Per Cabang</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Produk</th>
+                <th>Sisa Expected</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Dada goreng</td><td>22 pcs</td></tr>
+            <tr><td>Paha atas goreng</td><td>15 pcs</td></tr>
+            <tr><td>Sayap goreng</td><td>15 pcs</td></tr>
+            <tr><td>Paha bawah goreng</td><td>20 pcs jika refund mengembalikan stok</td></tr>
+            <tr><td>Aqua</td><td>19 pcs</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Expected Akuntansi Per Cabang</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Komponen</th>
+                <th>Nilai</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Gross sales</td><td>230.000</td></tr>
+            <tr><td>Diskon penjualan</td><td>4.000</td></tr>
+            <tr><td>Net sales setelah diskon</td><td>226.000</td></tr>
+            <tr><td>Retur penjualan</td><td>10.000</td></tr>
+            <tr><td>Net sales setelah refund</td><td>216.000</td></tr>
+            <tr><td>Beban promosi redeem</td><td>5.000</td></tr>
+            <tr><td>Net customer collectible</td><td>211.000</td></tr>
+            <tr><td>HPP</td><td>105.000</td></tr>
+            <tr><td>Laba kotor</td><td>111.000</td></tr>
+            <tr><td>Laba setelah promo</td><td>106.000</td></tr>
+        </tbody>
+    </table>
+
+    <h2>COA UAT Inti</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Kode</th>
+                <th>Nama Akun</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>1120</td><td>Kas Kecil / Laci Kas</td></tr>
+            <tr><td>1140</td><td>QRIS Clearing / Piutang Gateway</td></tr>
+            <tr><td>2120</td><td>Uang Muka Pelanggan</td></tr>
+            <tr><td>4110</td><td>Penjualan Makanan</td></tr>
+            <tr><td>4120</td><td>Penjualan Minuman</td></tr>
+            <tr><td>4190</td><td>Diskon Penjualan</td></tr>
+            <tr><td>4191</td><td>Retur Penjualan</td></tr>
+            <tr><td>5110</td><td>HPP Makanan</td></tr>
+            <tr><td>5120</td><td>HPP Minuman</td></tr>
+            <tr><td>6110</td><td>Beban Gas</td></tr>
+            <tr><td>6140</td><td>Beban Promosi</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Checklist UAT</h2>
+    <table class="check">
+        <thead>
+            <tr>
+                <th>Skenario</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Pendaftaran tenant</td><td>_____</td></tr>
+            <tr><td>Setup usaha dan cabang</td><td>_____</td></tr>
+            <tr><td>Setup user dan role</td><td>_____</td></tr>
+            <tr><td>Master produk dan stok</td><td>_____</td></tr>
+            <tr><td>Produksi</td><td>_____</td></tr>
+            <tr><td>Shift kasir</td><td>_____</td></tr>
+            <tr><td>Cash in / out</td><td>_____</td></tr>
+            <tr><td>Dine in / take away</td><td>_____</td></tr>
+            <tr><td>Split amount</td><td>_____</td></tr>
+            <tr><td>Split item</td><td>_____</td></tr>
+            <tr><td>Promo voucher manual</td><td>_____</td></tr>
+            <tr><td>Promo dari struk untuk kunjungan berikutnya</td><td>_____</td></tr>
+            <tr><td>Campaign promo terjadwal versi gratis produk</td><td>_____</td></tr>
+            <tr><td>Campaign promo terjadwal versi potong harga</td><td>_____</td></tr>
+            <tr><td>Campaign override terhadap voucher default struk</td><td>_____</td></tr>
+            <tr><td>Cetak voucher kecil / kupon promo</td><td>_____</td></tr>
+            <tr><td>Tombol tutup pada halaman print voucher kecil</td><td>_____</td></tr>
+            <tr><td>Diskon minimum pembelian</td><td>_____</td></tr>
+            <tr><td>Redeem minimum pembelian</td><td>_____</td></tr>
+            <tr><td>Refund manual</td><td>_____</td></tr>
+            <tr><td>Laporan cabang</td><td>_____</td></tr>
+            <tr><td>Laporan per shift</td><td>_____</td></tr>
+            <tr><td>Laporan tenant</td><td>_____</td></tr>
+            <tr><td>Laporan akuntansi</td><td>_____</td></tr>
+        </tbody>
+    </table>
+
+    <h2>Catatan Temuan</h2>
+    <div class="box" style="min-height: 180px;">
+        <p>1. ________________________________________________________________</p>
+        <p>2. ________________________________________________________________</p>
+        <p>3. ________________________________________________________________</p>
+        <p>4. ________________________________________________________________</p>
+        <p>5. ________________________________________________________________</p>
+    </div>
+
+    <div class="signatures">
+        <div class="sign">QA / Tester</div>
+        <div class="sign">PIC Operasional</div>
+        <div class="sign">PIC Dev / Product</div>
+    </div>
+</div>
+</body>
+</html>
