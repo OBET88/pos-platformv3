@@ -7,11 +7,13 @@ use App\Models\Platform\Plan;
 use App\Services\Platform\PlatformSettings;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
+use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use Livewire\Component;
 
 #[Layout('layouts.platform-admin')]
 class PlanManager extends Component
 {
+    use AuthorizesPlatformAdmin;
     use InteractsWithPlans;
 
     public array $newPlanForm = [

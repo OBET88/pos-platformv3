@@ -4,12 +4,14 @@ namespace App\Livewire\Platform\Admin;
 
 use App\Models\Platform\Announcement;
 use Livewire\Attributes\Layout;
+use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use Livewire\Component;
 use Livewire\WithPagination;
 
 #[Layout('layouts.platform-admin')]
 class AnnouncementManager extends Component
 {
+    use AuthorizesPlatformAdmin;
     use WithPagination;
 
     public array $form = [

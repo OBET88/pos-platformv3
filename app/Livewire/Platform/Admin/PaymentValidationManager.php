@@ -9,12 +9,14 @@ use App\Services\Platform\PlatformInboxPublisher;
 use App\Services\Platform\TenantAuditLogger;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
+use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use Livewire\Component;
 use Livewire\WithPagination;
 
 #[Layout('layouts.platform-admin')]
 class PaymentValidationManager extends Component
 {
+    use AuthorizesPlatformAdmin;
     use WithPagination;
 
     public array $rejectConfirmations = [];

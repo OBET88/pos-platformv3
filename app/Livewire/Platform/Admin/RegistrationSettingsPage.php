@@ -7,11 +7,13 @@ use App\Services\Platform\PlatformSettings;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
+use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use Livewire\Component;
 
 #[Layout('layouts.platform-admin')]
 class RegistrationSettingsPage extends Component
 {
+    use AuthorizesPlatformAdmin;
     public int $defaultTrialDays = 14;
 
     public array $publicRegistrationPlanCodes = [];

@@ -8,12 +8,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
+use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use Livewire\Component;
 use Livewire\WithPagination;
 
 #[Layout('layouts.platform-admin')]
 class InboxManager extends Component
 {
+    use AuthorizesPlatformAdmin;
     use WithPagination;
 
     #[Url(as: 'filter', except: 'all')]

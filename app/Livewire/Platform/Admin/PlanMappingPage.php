@@ -5,11 +5,13 @@ namespace App\Livewire\Platform\Admin;
 use App\Livewire\Platform\Admin\Concerns\InteractsWithPlans;
 use App\Models\Platform\Plan;
 use Livewire\Attributes\Layout;
+use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use Livewire\Component;
 
 #[Layout('layouts.platform-admin')]
 class PlanMappingPage extends Component
 {
+    use AuthorizesPlatformAdmin;
     use InteractsWithPlans;
 
     public Plan $plan;

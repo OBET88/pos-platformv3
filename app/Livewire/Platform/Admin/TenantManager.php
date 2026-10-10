@@ -27,6 +27,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
+use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use Livewire\Component;
 use Livewire\WithPagination;
 use RuntimeException;
@@ -34,6 +35,7 @@ use RuntimeException;
 #[Layout('layouts.platform-admin')]
 class TenantManager extends Component
 {
+    use AuthorizesPlatformAdmin;
     use WithPagination;
 
     #[Url(as: 'q', except: '')]

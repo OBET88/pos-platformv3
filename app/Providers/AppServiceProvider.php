@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Models\Platform\Tenant;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
@@ -26,5 +27,12 @@ class AppServiceProvider extends ServiceProvider
 
             return $tenant instanceof Tenant && $tenant->hasFeature($feature);
         });
+
+        // Livewire update requests tidak melewati middleware route halaman.
+        // Middleware yang terdaftar sebagai "persistent" dijalankan ulang pada
+        // endpoint /livewire/update, sehingga proteksi admin platform tetap
+        // berlaku untuk semua aksi Livewire (bukan hanya render halaman).
+        app(\Livewire\Mechanisms\PersistentMiddleware\PersistentMiddleware::class)
+            ->addPersistentMiddleware([EnsurePlatformAdmin::class]);
     }
 }

@@ -10,11 +10,13 @@ use App\Support\Accounting\AccountingMappingKey;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
+use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use Livewire\Component;
 
 #[Layout('layouts.platform-admin')]
 class AccountingSettingsPage extends Component
 {
+    use AuthorizesPlatformAdmin;
     #[Url(as: 'tenant', except: '')]
     public string $selectedTenantId = '';
 
