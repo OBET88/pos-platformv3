@@ -31,3 +31,11 @@ pos-platform.zip
 DB/.envEE
 DB/.envlptop1
 docs/doc-migrate-db.php
+
+# Catatan & file kerja sementara
+/ctt*.php
+/tmp_check.txt
+/Kalau
+/Setelah
+/Untuk
+docs/~$*
