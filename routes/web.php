@@ -19,6 +19,7 @@ use App\Livewire\Platform\Admin\PlatformUsersManager;
 use App\Livewire\Platform\Admin\RegistrationSettingsPage;
 use App\Livewire\Platform\Admin\RolesManager;
 use App\Livewire\Platform\Admin\TenantManager;
+use App\Livewire\Platform\Admin\TenantPaymentGatewayConfigManager;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PlatformRegistrationController::class, 'landing'])
@@ -100,6 +101,9 @@ Route::middleware(['auth', 'platform.admin'])->group(function () {
         Route::get('/announcements', AnnouncementManager::class)
             ->middleware('platform.can:view_announcements')
             ->name('announcements.index');
+        Route::get('/gateways', TenantPaymentGatewayConfigManager::class)
+            ->middleware('platform.can:manage_tenant_gateways')
+            ->name('gateways.index');
         Route::get('/roles', RolesManager::class)
             ->middleware('platform.can:view_roles')
             ->name('roles.index');

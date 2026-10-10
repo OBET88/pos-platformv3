@@ -76,6 +76,11 @@ class Tenant extends Model
         return $this->hasMany(AccountingJournal::class);
     }
 
+    public function paymentGatewayConfigs(): HasMany
+    {
+        return $this->hasMany(TenantPaymentGatewayConfig::class);
+    }
+
     public function latestSubscription(): ?Subscription
     {
         if ($this->relationLoaded('subscriptions')) {
@@ -115,7 +120,7 @@ class Tenant extends Model
     public function hasFeature(string $feature): bool
     {
         return $this->subscribedFeatures()->contains(
-            \Illuminate\Support\Str::of($feature)->trim()->lower()->toString()
+            Str::of($feature)->trim()->lower()->toString()
         );
     }
 }

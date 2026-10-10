@@ -889,6 +889,7 @@
                         'items' => [
                             ['key' => 'plans', 'label' => 'Paket & Fitur', 'hint' => 'Langganan', 'route' => 'platform.admin.plans.index', 'match' => 'platform.admin.plans.*'],
                             ['key' => 'registration', 'label' => 'Pengaturan Pendaftaran', 'hint' => 'Form publik', 'route' => 'platform.admin.settings.registration', 'match' => 'platform.admin.settings.registration'],
+                            ['key' => 'gateways', 'label' => 'Payment Gateway', 'hint' => 'Credential per tenant', 'route' => 'platform.admin.gateways.index', 'match' => 'platform.admin.gateways.index'],
                         ],
                     ],
                     [

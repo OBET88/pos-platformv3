@@ -27,6 +27,8 @@ return new class extends Migration
         ['name' => 'manage_inbox', 'label' => 'Kelola inbox', 'group' => 'Inbox'],
         ['name' => 'view_accounting', 'label' => 'Lihat akuntansi tenant', 'group' => 'Akuntansi'],
         ['name' => 'manage_accounting', 'label' => 'Kelola akuntansi tenant', 'group' => 'Akuntansi'],
+        ['name' => 'view_tenant_gateways', 'label' => 'Lihat payment gateway tenant', 'group' => 'Payment Gateway'],
+        ['name' => 'manage_tenant_gateways', 'label' => 'Kelola payment gateway tenant', 'group' => 'Payment Gateway'],
         ['name' => 'view_roles', 'label' => 'Lihat role & hak akses', 'group' => 'Hak Akses'],
         ['name' => 'manage_roles', 'label' => 'Kelola role & hak akses', 'group' => 'Hak Akses'],
         ['name' => 'manage_platform_users', 'label' => 'Kelola pengguna platform', 'group' => 'Hak Akses'],
@@ -47,7 +49,7 @@ return new class extends Migration
         ],
         'tenant-admin' => [
             'label' => 'Admin Tenant',
-            'permissions' => ['view_tenants', 'manage_tenants', 'view_plans', 'view_inbox'],
+            'permissions' => ['view_tenants', 'manage_tenants', 'view_plans', 'view_inbox', 'view_tenant_gateways'],
         ],
         'accountant' => [
             'label' => 'Akuntan',
