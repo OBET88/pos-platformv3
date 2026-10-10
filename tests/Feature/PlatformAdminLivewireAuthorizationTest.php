@@ -2,8 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Platform\Admin\AccountingReportPage;
-use App\Livewire\Platform\Admin\AccountingSettingsPage;
 use App\Livewire\Platform\Admin\AnnouncementManager;
 use App\Livewire\Platform\Admin\InboxManager;
 use App\Livewire\Platform\Admin\PaymentValidationManager;
@@ -38,8 +36,6 @@ class PlatformAdminLivewireAuthorizationTest extends TestCase
             'PlanEditorPage' => [PlanEditorPage::class, true],
             'PlanMappingPage' => [PlanMappingPage::class, true],
             'RegistrationSettingsPage' => [RegistrationSettingsPage::class, false],
-            'AccountingSettingsPage' => [AccountingSettingsPage::class, false],
-            'AccountingReportPage' => [AccountingReportPage::class, false],
         ];
     }
 

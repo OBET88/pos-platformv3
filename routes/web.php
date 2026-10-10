@@ -9,8 +9,6 @@ use App\Http\Controllers\PlatformRegistrationController;
 use App\Http\Controllers\PlatformRenewalController;
 use App\Http\Controllers\PlatformUpgradeController;
 use App\Http\Controllers\TenantSubscriptionCenterController;
-use App\Livewire\Platform\Admin\AccountingReportPage;
-use App\Livewire\Platform\Admin\AccountingSettingsPage;
 use App\Livewire\Platform\Admin\AnnouncementManager;
 use App\Livewire\Platform\Admin\InboxManager;
 use App\Livewire\Platform\Admin\PaymentValidationManager;
@@ -114,12 +112,6 @@ Route::middleware(['auth', 'platform.admin'])->group(function () {
         Route::get('/settings/registration', RegistrationSettingsPage::class)
             ->middleware('platform.can:manage_settings')
             ->name('settings.registration');
-        Route::get('/accounting/settings', AccountingSettingsPage::class)
-            ->middleware('platform.can:view_accounting')
-            ->name('accounting.settings');
-        Route::get('/accounting/reports', AccountingReportPage::class)
-            ->middleware('platform.can:view_accounting')
-            ->name('accounting.reports');
         Route::get('/plans/{plan}/mapping', PlanMappingPage::class)
             ->middleware('platform.can:manage_plans')
             ->name('plans.mapping');

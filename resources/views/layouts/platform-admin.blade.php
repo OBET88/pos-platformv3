@@ -889,7 +889,6 @@
                         'items' => [
                             ['key' => 'plans', 'label' => 'Paket & Fitur', 'hint' => 'Langganan', 'route' => 'platform.admin.plans.index', 'match' => 'platform.admin.plans.*'],
                             ['key' => 'registration', 'label' => 'Pengaturan Pendaftaran', 'hint' => 'Form publik', 'route' => 'platform.admin.settings.registration', 'match' => 'platform.admin.settings.registration'],
-                            ['key' => 'accounting', 'label' => 'Akuntansi Tenant', 'hint' => 'COA & jurnal', 'route' => 'platform.admin.accounting.settings', 'match' => 'platform.admin.accounting.*'],
                         ],
                     ],
                     [

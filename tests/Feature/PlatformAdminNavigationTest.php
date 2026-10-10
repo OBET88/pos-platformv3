@@ -30,23 +30,7 @@ class PlatformAdminNavigationTest extends TestCase
             ->assertSee('Validasi Pembayaran')
             ->assertSee('Paket &amp; Fitur', false)
             ->assertSee('Pengaturan Pendaftaran')
-            ->assertSee('Akuntansi Tenant')
             ->assertSee('Pengumuman');
-    }
-
-    public function test_previously_orphaned_accounting_pages_are_reachable(): void
-    {
-        $admin = $this->admin();
-
-        $this->actingAs($admin)
-            ->get(route('platform.admin.accounting.settings'))
-            ->assertOk()
-            ->assertSee('Kelola COA dan mapping akun default per tenant.');
-
-        $this->actingAs($admin)
-            ->get(route('platform.admin.accounting.reports'))
-            ->assertOk()
-            ->assertSee('Pantau jurnal posted dan pending mapping lintas tenant.');
     }
 
     public function test_plan_manager_surfaces_public_registration_visibility(): void
