@@ -4,8 +4,11 @@ namespace App\Providers;
 
 use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Models\Platform\Tenant;
+use App\Models\User;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Mechanisms\PersistentMiddleware\PersistentMiddleware;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,6 +25,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Super-admin (flag lama) lolos semua cek Gate/permission platform.
+        Gate::before(function (User $user, string $ability): ?bool {
+            return $user->is_platform_admin ? true : null;
+        });
+
         Blade::if('tenantFeature', function (string $feature, ?Tenant $tenant = null): bool {
             $tenant ??= request()->attributes->get('tenant');
 
@@ -32,7 +40,7 @@ class AppServiceProvider extends ServiceProvider
         // Middleware yang terdaftar sebagai "persistent" dijalankan ulang pada
         // endpoint /livewire/update, sehingga proteksi admin platform tetap
         // berlaku untuk semua aksi Livewire (bukan hanya render halaman).
-        app(\Livewire\Mechanisms\PersistentMiddleware\PersistentMiddleware::class)
+        app(PersistentMiddleware::class)
             ->addPersistentMiddleware([EnsurePlatformAdmin::class]);
     }
 }

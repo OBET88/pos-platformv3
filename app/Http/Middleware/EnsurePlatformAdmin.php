@@ -12,7 +12,8 @@ class EnsurePlatformAdmin
     {
         $user = $request->user();
 
-        if (!$user || !$user->is_platform_admin) {
+        // Super-admin (flag lama) atau user platform yang punya minimal satu role.
+        if (! $user || ! ((bool) $user->is_platform_admin || $user->hasAnyPlatformRole())) {
             abort(403);
         }
 

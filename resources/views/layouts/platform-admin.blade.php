@@ -899,6 +899,17 @@
                             ['key' => 'public', 'label' => 'Form Pendaftaran', 'hint' => 'Halaman publik', 'route' => 'platform.register.create', 'match' => 'platform.register.create'],
                         ],
                     ],
+                    [
+                        'label' => 'Hak Akses',
+                        'items' => array_values(array_filter([
+                            auth()->user()?->hasPlatformPermission('view_roles')
+                                ? ['key' => 'roles', 'label' => 'Role & Hak Akses', 'hint' => 'Permission staff', 'route' => 'platform.admin.roles.index', 'match' => 'platform.admin.roles.index']
+                                : null,
+                            auth()->user()?->hasPlatformPermission('manage_platform_users')
+                                ? ['key' => 'platform-users', 'label' => 'Pengguna Platform', 'hint' => 'Akun staff', 'route' => 'platform.admin.users.index', 'match' => 'platform.admin.users.index']
+                                : null,
+                        ])),
+                    ],
                 ])
 
                 @php($badgeMap = [
@@ -907,6 +918,7 @@
                 ])
 
                 @foreach ($navGroups as $group)
+                    @continue (empty($group['items']))
                     <div class="space-y-1.5">
                         <p class="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">{{ $group['label'] }}</p>
                         @foreach ($group['items'] as $item)

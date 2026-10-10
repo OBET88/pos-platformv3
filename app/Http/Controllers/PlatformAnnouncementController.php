@@ -11,7 +11,9 @@ class PlatformAnnouncementController extends Controller
 {
     public function dismiss(Request $request, Announcement $announcement): RedirectResponse
     {
-        abort_unless($request->user()?->is_platform_admin, 403);
+        $user = $request->user();
+
+        abort_unless($user && $user->hasPlatformPermission('view_announcements'), 403);
 
         AnnouncementDismissal::query()->updateOrCreate(
             [

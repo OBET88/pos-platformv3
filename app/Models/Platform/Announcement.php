@@ -3,6 +3,7 @@
 namespace App\Models\Platform;
 
 use App\Models\User;
+use App\Support\HtmlSanitizer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +16,7 @@ class Announcement extends Model
     protected $fillable = [
         'title',
         'message',
+        'message_html',
         'tone',
         'is_active',
         'show_as_modal',
@@ -44,6 +46,23 @@ class Announcement extends Model
     public function dismissals(): HasMany
     {
         return $this->hasMany(AnnouncementDismissal::class, 'announcement_id');
+    }
+
+    public function tenantReads(): HasMany
+    {
+        return $this->hasMany(AnnouncementUserRead::class, 'announcement_id');
+    }
+
+    /**
+     * Versi HTML tersanitasi untuk ditampilkan; fallback ke pesan polos.
+     */
+    public function renderedHtml(): string
+    {
+        if (filled($this->message_html)) {
+            return HtmlSanitizer::clean($this->message_html);
+        }
+
+        return nl2br(e((string) $this->message));
     }
 
     public function scopeActiveWindow(Builder $query): Builder

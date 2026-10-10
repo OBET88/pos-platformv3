@@ -33,7 +33,7 @@ class PlatformAuthController extends Controller
             return $this->sendLockoutResponse($throttleKey);
         }
 
-        if (!Auth::attempt($credentials, (bool) $request->boolean('remember'))) {
+        if (! Auth::attempt($credentials, (bool) $request->boolean('remember'))) {
             RateLimiter::hit($throttleKey, self::LOGIN_LOCKOUT_SECONDS);
 
             if (RateLimiter::remaining($throttleKey, self::MAX_LOGIN_ATTEMPTS) <= 0) {
@@ -50,7 +50,7 @@ class PlatformAuthController extends Controller
             ])->onlyInput('email');
         }
 
-        if (!$request->user()?->is_platform_admin) {
+        if (! $request->user()?->is_platform_admin && ! $request->user()?->hasAnyPlatformRole()) {
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();

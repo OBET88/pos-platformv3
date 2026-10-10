@@ -17,7 +17,9 @@ use App\Livewire\Platform\Admin\PaymentValidationManager;
 use App\Livewire\Platform\Admin\PlanEditorPage;
 use App\Livewire\Platform\Admin\PlanManager;
 use App\Livewire\Platform\Admin\PlanMappingPage;
+use App\Livewire\Platform\Admin\PlatformUsersManager;
 use App\Livewire\Platform\Admin\RegistrationSettingsPage;
+use App\Livewire\Platform\Admin\RolesManager;
 use App\Livewire\Platform\Admin\TenantManager;
 use Illuminate\Support\Facades\Route;
 
@@ -89,42 +91,67 @@ Route::middleware(['auth', 'platform.admin'])->group(function () {
 
     Route::prefix('admin')->name('platform.admin.')->group(function () {
         Route::get('/tenants', TenantManager::class)
+            ->middleware('platform.can:view_tenants')
             ->name('tenants.index');
         Route::get('/inbox', InboxManager::class)
+            ->middleware('platform.can:view_inbox')
             ->name('inbox.index');
         Route::get('/payments', PaymentValidationManager::class)
+            ->middleware('platform.can:view_payments')
             ->name('payments.index');
         Route::get('/announcements', AnnouncementManager::class)
+            ->middleware('platform.can:view_announcements')
             ->name('announcements.index');
+        Route::get('/roles', RolesManager::class)
+            ->middleware('platform.can:view_roles')
+            ->name('roles.index');
+        Route::get('/users', PlatformUsersManager::class)
+            ->middleware('platform.can:manage_platform_users')
+            ->name('users.index');
         Route::get('/plans', PlanManager::class)
+            ->middleware('platform.can:view_plans')
             ->name('plans.index');
         Route::get('/settings/registration', RegistrationSettingsPage::class)
+            ->middleware('platform.can:manage_settings')
             ->name('settings.registration');
         Route::get('/accounting/settings', AccountingSettingsPage::class)
+            ->middleware('platform.can:view_accounting')
             ->name('accounting.settings');
         Route::get('/accounting/reports', AccountingReportPage::class)
+            ->middleware('platform.can:view_accounting')
             ->name('accounting.reports');
         Route::get('/plans/{plan}/mapping', PlanMappingPage::class)
+            ->middleware('platform.can:manage_plans')
             ->name('plans.mapping');
         Route::get('/plans/{plan}/edit', PlanEditorPage::class)
+            ->middleware('platform.can:manage_plans')
             ->name('plans.edit');
         Route::post('/tenants/{tenant}/provision', [PlatformAdminTenantActionController::class, 'provision'])
+            ->middleware('platform.can:manage_tenants')
             ->name('tenants.provision');
         Route::post('/tenants/{tenant}/bootstrap', [PlatformAdminTenantActionController::class, 'bootstrap'])
+            ->middleware('platform.can:manage_tenants')
             ->name('tenants.bootstrap');
         Route::post('/tenants/{tenant}/profile', [PlatformAdminTenantActionController::class, 'updateProfile'])
+            ->middleware('platform.can:manage_tenants')
             ->name('tenants.profile');
         Route::post('/tenants/{tenant}/renew', [PlatformAdminTenantActionController::class, 'renewSubscription'])
+            ->middleware('platform.can:manage_tenants')
             ->name('tenants.renew');
         Route::post('/tenants/{tenant}/plan', [PlatformAdminTenantActionController::class, 'updatePlan'])
+            ->middleware('platform.can:manage_tenants')
             ->name('tenants.plan');
         Route::post('/tenants/{tenant}/domain', [PlatformAdminTenantActionController::class, 'updateDomain'])
+            ->middleware('platform.can:manage_tenants')
             ->name('tenants.domain');
         Route::post('/tenants/{tenant}/status', [PlatformAdminTenantActionController::class, 'updateStatus'])
+            ->middleware('platform.can:manage_tenants')
             ->name('tenants.status');
         Route::post('/tenants/{tenant}/notes', [PlatformAdminTenantActionController::class, 'addNote'])
+            ->middleware('platform.can:manage_tenants')
             ->name('tenants.notes');
         Route::post('/announcements/{announcement}/dismiss', [PlatformAnnouncementController::class, 'dismiss'])
+            ->middleware('platform.can:view_announcements')
             ->name('announcements.dismiss');
     });
 });

@@ -3,7 +3,6 @@
 namespace App\Livewire\Platform\Admin\Concerns;
 
 use Illuminate\Database\Eloquent\Model;
-use Livewire\Exceptions\MethodNotFoundException;
 
 /**
  * Otorisasi defence-in-depth untuk komponen Livewire admin platform.
@@ -30,7 +29,10 @@ trait AuthorizesPlatformAdmin
     {
         $user = auth()->user();
 
-        if (! $user || ! (bool) $user->is_platform_admin) {
+        $allowed = $user
+            && ((bool) $user->is_platform_admin || $user->hasAnyPlatformRole());
+
+        if (! $allowed) {
             abort(403, 'Akses hanya untuk admin platform.');
         }
     }
@@ -41,5 +43,24 @@ trait AuthorizesPlatformAdmin
     protected function authorizeAdminMutation(?Model $model = null): void
     {
         $this->authorizeAdminAccess();
+    }
+
+    /**
+     * Pastikan user punya permission platform tertentu (super-admin selalu lolos).
+     */
+    protected function authorizePlatformPermission(string $permission): void
+    {
+        $user = auth()->user();
+
+        if (! $user || ! $user->hasPlatformPermission($permission)) {
+            abort(403, 'Anda tidak memiliki hak akses untuk tindakan ini.');
+        }
+    }
+
+    protected function platformUserCan(string $permission): bool
+    {
+        $user = auth()->user();
+
+        return (bool) $user && $user->hasPlatformPermission($permission);
     }
 }
