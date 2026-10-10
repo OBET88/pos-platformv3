@@ -32,7 +32,7 @@ use Livewire\Component;
 use Livewire\WithPagination;
 use RuntimeException;
 
-#[Layout('layouts.platform-admin')]
+#[Layout('layouts.platform-admin', ['title' => 'Platform Admin - Tenant Manager'])]
 class TenantManager extends Component
 {
     use AuthorizesPlatformAdmin;

@@ -496,7 +496,8 @@
                         </div>
                     </div>
 
-                    @php($primaryDomainUrl = filled($primaryDomain) ? 'http://'.$primaryDomain : null)
+                    @php($tenantUrlScheme = (request()->secure() || str_starts_with((string) config('app.url'), 'https://')) ? 'https' : 'http')
+                    @php($primaryDomainUrl = filled($primaryDomain) ? $tenantUrlScheme.'://'.$primaryDomain : null)
                     @if ($activeTab === 'summary')
                     <div class="flex flex-wrap gap-3">
                         @if ($primaryDomainUrl)
@@ -546,14 +547,24 @@
                                 <h3 class="text-sm font-semibold text-slate-900">Ringkasan Operasional</h3>
                                 <p class="text-sm text-slate-500">Blok ringkasan yang bisa langsung dicopy untuk tim support, monitoring, atau handoff recovery internal.</p>
                             </div>
-                            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                                Siap disalin
-                            </span>
+                            <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                <span id="tenant-summary-copied" class="hidden rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                    Tersalin!
+                                </span>
+                                <button
+                                    type="button"
+                                    data-copy-tenant-summary
+                                    class="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                >
+                                    Salin Ringkasan
+                                </button>
+                            </div>
                         </div>
 
                         <textarea
                             readonly
                             rows="10"
+                            id="tenant-operational-summary"
                             class="mt-4 w-full rounded-2xl border border-slate-300 bg-slate-950 px-4 py-4 font-mono text-xs text-slate-100 focus:border-emerald-400 focus:outline-none"
                         >Tenant: {{ $selectedTenant->name }}
 Kode: {{ $selectedTenant->code }}
@@ -567,9 +578,66 @@ Nama Pemilik: {{ $selectedTenant->owner_name ?: '-' }}
 Email Pemilik: {{ $selectedTenant->owner_email ?: '-' }}
 Bootstrap Aplikasi Tenant: {{ ($bootstrapLog?->status === 'completed') ? 'Selesai' : 'Belum selesai' }}</textarea>
 
-                        <p class="mt-3 text-xs text-slate-500">
-                            Anda bisa klik area teks lalu `Ctrl+A` dan `Ctrl+C` untuk copy seluruh ringkasan operasional tenant ini.
-                        </p>
+                        @script
+                        <script>
+                            (() => {
+                                const button = document.querySelector('[data-copy-tenant-summary]');
+
+                                if (! button || button.dataset.copyBound === '1') {
+                                    return;
+                                }
+
+                                button.dataset.copyBound = '1';
+
+                                button.addEventListener('click', async () => {
+                                    const textarea = document.getElementById('tenant-operational-summary');
+                                    const badge = document.getElementById('tenant-summary-copied');
+
+                                    if (! textarea) {
+                                        return;
+                                    }
+
+                                    const text = textarea.value;
+                                    let copied = false;
+
+                                    try {
+                                        if (navigator.clipboard && window.isSecureContext) {
+                                            await navigator.clipboard.writeText(text);
+                                            copied = true;
+                                        }
+                                    } catch (error) {
+                                        copied = false;
+                                    }
+
+                                    if (! copied) {
+                                        textarea.focus();
+                                        textarea.select();
+
+                                        try {
+                                            copied = document.execCommand('copy');
+                                        } catch (error) {
+                                            copied = false;
+                                        }
+
+                                        textarea.setSelectionRange(0, 0);
+                                        textarea.blur();
+                                    }
+
+                                    if (! badge) {
+                                        return;
+                                    }
+
+                                    badge.textContent = copied ? 'Tersalin!' : 'Gagal menyalin';
+                                    badge.classList.remove('hidden');
+
+                                    window.clearTimeout(badge.dataset.hideTimer);
+                                    badge.dataset.hideTimer = window.setTimeout(() => {
+                                        badge.classList.add('hidden');
+                                    }, 2200);
+                                });
+                            })();
+                        </script>
+                        @endscript
                     </div>
 
                     <div class="grid gap-3 sm:grid-cols-2">
