@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -152,6 +153,11 @@ class PlatformRegistrationController extends Controller
         TenantRegistrationService $registrationService,
         PlatformInboxPublisher $inboxPublisher
     ): RedirectResponse {
+        $tooManyAttempts = $this->ensureRegistrationThrottled($request, 'registration-store', 5, 300);
+        if ($tooManyAttempts !== null) {
+            return $tooManyAttempts;
+        }
+
         $this->prepareRegistrationRequest();
         $this->normalizeRegistrationInput($request);
 
@@ -238,6 +244,11 @@ class PlatformRegistrationController extends Controller
 
     public function resendVerification(Request $request): RedirectResponse
     {
+        $tooManyAttempts = $this->ensureRegistrationThrottled($request, 'registration-resend', 3, 600);
+        if ($tooManyAttempts !== null) {
+            return $tooManyAttempts;
+        }
+
         $this->prepareRegistrationRequest();
         $this->normalizeRegistrationInput($request);
 
@@ -533,6 +544,17 @@ class PlatformRegistrationController extends Controller
 
     public function bootstrap(Request $request, string $tenant, TenantRegistrationService $registrationService): JsonResponse
     {
+        $throttleKey = 'registration-bootstrap:'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 10)) {
+            return response()->json([
+                'status' => 'throttled',
+                'message' => 'Terlalu banyak permintaan bootstrap. Silakan coba lagi dalam '.max(RateLimiter::availableIn($throttleKey), 1).' detik.',
+            ], 429);
+        }
+
+        RateLimiter::hit($throttleKey, 300);
+
         $tenantModel = Tenant::query()->where('code', $tenant)->first();
 
         if (! $tenantModel) {
@@ -706,6 +728,35 @@ class PlatformRegistrationController extends Controller
     private function normalizeEmail(string $email): string
     {
         return strtolower(trim($email));
+    }
+
+    /**
+     * Throttle anti email-bombing untuk endpoint publik pendaftaran.
+     * Dihitung per kombinasi email tujuan + IP supaya satu penyerang tidak
+     * bisa membanjiri satu alamat email korban dari banyak form, dan satu IP
+     * tidak bisa menyerang banyak korban sekaligus tanpa batas.
+     *
+     * Return null bila boleh lanjut, atau RedirectResponse 429 bila melebihi batas.
+     */
+    private function ensureRegistrationThrottled(Request $request, string $bucket, int $maxAttempts, int $decaySeconds): ?RedirectResponse
+    {
+        $targetEmail = $this->normalizeEmail((string) $request->input('owner_email', (string) session('pending_registration_email', '')));
+        $key = $bucket.':'.($targetEmail !== '' ? $targetEmail.'|' : '').$request->ip();
+
+        if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
+            $seconds = max(RateLimiter::availableIn($key), 1);
+            $minutes = (int) ceil($seconds / 60);
+
+            return back()->withErrors([
+                'owner_email' => 'Terlalu banyak permintaan dalam waktu singkat. Silakan coba lagi dalam '
+                    .$minutes
+                    .' menit.',
+            ])->setStatusCode(429);
+        }
+
+        RateLimiter::hit($key, $decaySeconds);
+
+        return null;
     }
 
     private function normalizeRegistrationInput(Request $request): void
