@@ -38,6 +38,58 @@
                 display: none !important;
             }
 
+            /* Navigasi ponsel (dipakai juga saat aset Vite belum di-build). */
+            .platform-mobile-bar {
+                display: flex;
+            }
+
+            .platform-nav-backdrop {
+                display: none;
+            }
+
+            .platform-nav-close {
+                display: inline-flex;
+            }
+
+            @media (max-width: 1023.98px) {
+                .platform-sidebar {
+                    position: fixed;
+                    top: 0;
+                    bottom: 0;
+                    left: 0;
+                    z-index: 60;
+                    width: min(288px, 86vw);
+                    overflow-y: auto;
+                    overscroll-behavior: contain;
+                    transform: translateX(-100%);
+                    transition: transform 200ms ease;
+                    box-shadow: 0 24px 70px rgba(2, 6, 23, 0.5);
+                }
+
+                .platform-sidebar[data-nav-open='true'] {
+                    transform: translateX(0);
+                }
+
+                .platform-nav-backdrop {
+                    display: block;
+                    position: fixed;
+                    inset: 0;
+                    z-index: 55;
+                    background: rgba(2, 6, 23, 0.62);
+                }
+
+                .platform-nav-backdrop[hidden] {
+                    display: none;
+                }
+            }
+
+            @media (min-width: 1024px) {
+                .platform-mobile-bar,
+                .platform-nav-close {
+                    display: none;
+                }
+            }
+
             html,
             body {
                 margin: 0;
@@ -733,7 +785,7 @@
             }
 
             @media (min-width: 1024px) {
-                body > div:first-of-type {
+                .platform-shell-grid {
                     display: grid;
                     grid-template-columns: 300px minmax(0, 1fr);
                 }
@@ -862,7 +914,7 @@
         class="min-h-screen {{ $hasViteAssets ? '' : 'platform-admin-fallback' }}"
     >
         {{-- Top bar ponsel: sidebar jadi drawer agar konten tidak terdorong jauh ke bawah. --}}
-        <header class="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur lg:hidden">
+        <header class="platform-mobile-bar sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur lg:hidden">
             <div class="flex items-center gap-2">
                 <span class="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,0.9)]"></span>
                 <span class="text-sm font-semibold text-white">POS Platform</span>
@@ -880,7 +932,7 @@
             </button>
         </header>
 
-        <div class="lg:grid lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div class="platform-shell-grid lg:grid lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside
             class="platform-sidebar border-b border-white/10 px-5 py-5 lg:border-b-0 lg:border-r lg:px-6 lg:py-6"
             x-bind:data-nav-open="navOpen ? 'true' : 'false'"
@@ -1008,9 +1060,6 @@
                 </form>
             </div>
         </aside>
-        </div>
-
-        <div class="platform-nav-backdrop" x-show="navOpen" x-cloak x-on:click="navOpen = false" aria-hidden="true"></div>
 
         <main class="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
             <div class="platform-page-header rounded-[1.5rem] px-5 py-4 shadow-[0_18px_48px_rgba(2,6,23,0.18)]">
@@ -1056,6 +1105,9 @@
                 {{ $slot }}
             </div>
         </main>
+        </div>
+
+        <div class="platform-nav-backdrop" x-show="navOpen" x-cloak x-on:click="navOpen = false" aria-hidden="true"></div>
     </div>
 
     @if ($activeAnnouncementModal)

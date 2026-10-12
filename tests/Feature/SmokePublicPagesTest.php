@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -42,5 +43,26 @@ class SmokePublicPagesTest extends TestCase
         $upgrade = $this->get('/upgrade');
         $upgrade->assertOk();
         $upgrade->assertSee('platform.public.upgrade-request', false);
+    }
+
+    public function test_admin_layout_keeps_main_inside_the_grid_beside_sidebar(): void
+    {
+        $admin = User::query()->create([
+            'name' => 'Smoke Admin',
+            'email' => 'smoke-admin@example.com',
+            'password' => 'secret123',
+            'is_platform_admin' => true,
+        ]);
+
+        $html = $this->actingAs($admin)->get(route('platform.admin.tenants.index'))->assertOk()->getContent();
+
+        // Regresi: <main> harus berada di dalam grid yang sama dengan <aside>,
+        // supaya konten tidak jatuh ke bawah sidebar.
+        $this->assertLessThan(strpos($html, '<aside'), strpos($html, 'platform-shell-grid'));
+        $this->assertLessThan(strpos($html, '<main'), strpos($html, 'platform-shell-grid'));
+        $this->assertGreaterThan(strpos($html, '</main>'), strpos($html, 'platform-nav-backdrop'));
+
+        // Tag <div> harus seimbang (tidak ada elemen yang bocor).
+        $this->assertSame(substr_count($html, '<div'), substr_count($html, '</div>'));
     }
 }
