@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <title>POS|Verifikasi Email Pendaftaran</title>
+    @livewireStyles
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="shortcut icon" type="image/x-icon" href="{{ asset('ecohosting-main/assets/img/favicon.ico') }}">
     <link rel="stylesheet" href="{{ asset('ecohosting-main/assets/css/bootstrap.min.css') }}">
@@ -33,92 +34,8 @@
 </head>
 <body>
     <main class="shell">
-        <section class="card">
-            <div class="hero">
-                <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.84;">POS Platform</div>
-                <h1>Cek email dulu sebelum tenant dibuat.</h1>
-                <p>Pendaftaran publik sekarang menunggu verifikasi email owner agar tenant tidak dibuat dari spam, typo, atau pendaftaran yang tidak valid.</p>
-            </div>
-            <div class="body">
-                <div class="note">
-                    <strong>Email tujuan:</strong> {{ $ownerEmail }}
-                </div>
-                @if (session('status'))
-                    <div class="alert-box success">{{ session('status') }}</div>
-                @endif
-                @if (session('warning'))
-                    <div class="alert-box warning">{{ session('warning') }}</div>
-                @endif
-                @if (session('registration_email_sent', false))
-                    <p>Link verifikasi sudah kami kirim. Setelah link dibuka, sistem baru akan membuat tenant dan menjalankan onboarding otomatis seperti flow yang sudah ada sekarang.</p>
-                @else
-                    <p>Pengiriman email verifikasi belum terkonfirmasi dari aplikasi. Coba kirim ulang pendaftaran, lalu cek folder spam atau hubungi admin untuk verifikasi manual.</p>
-                @endif
-                <p>Kalau email belum masuk, cek folder spam/promotions dulu. Mengirim ulang pendaftaran dengan email yang sama tidak membuat tenant ganda. Sistem hanya memperbarui request verifikasi yang masih pending.</p>
-                <div class="actions">
-                    <form method="POST" action="{{ route('platform.register.resend') }}">
-                        @csrf
-                        <input type="hidden" name="owner_email" value="{{ $ownerEmail }}">
-                        <button
-                            type="submit"
-                            class="cta primary"
-                            id="resend-button"
-                            data-cooldown-seconds="{{ (int) $cooldownSecondsRemaining }}">
-                            Kirim Ulang Verifikasi
-                        </button>
-                    </form>
-                    <a href="{{ route('platform.register.create') }}" class="cta secondary">Kembali ke Form</a>
-                    <a href="{{ route('platform.help') }}" class="cta secondary">Butuh Bantuan?</a>
-                    <a href="{{ url('/') }}" class="cta secondary">Kembali ke Landing</a>
-                </div>
-                <p class="cooldown-note" id="resend-cooldown-note" @if (($cooldownSecondsRemaining ?? 0) <= 0) hidden @endif>
-                    Tombol kirim ulang akan aktif dalam <strong><span id="resend-cooldown-seconds">{{ max(0, (int) ($cooldownSecondsRemaining ?? 0)) }}</span></strong> detik.
-                </p>
-            </div>
-        </section>
+        @livewire('platform.public.pending-verification')
     </main>
-    <script>
-        (function () {
-            const button = document.getElementById('resend-button');
-            const note = document.getElementById('resend-cooldown-note');
-            const secondsLabel = document.getElementById('resend-cooldown-seconds');
-
-            if (!button || !note || !secondsLabel) {
-                return;
-            }
-
-            let remaining = Number(button.dataset.cooldownSeconds || 0);
-            const defaultLabel = 'Kirim Ulang Verifikasi';
-
-            const render = () => {
-                if (remaining > 0) {
-                    button.disabled = true;
-                    button.textContent = 'Kirim Ulang (' + remaining + ' dtk)';
-                    note.hidden = false;
-                    secondsLabel.textContent = String(remaining);
-                    return;
-                }
-
-                button.disabled = false;
-                button.textContent = defaultLabel;
-                note.hidden = true;
-            };
-
-            render();
-
-            if (remaining <= 0) {
-                return;
-            }
-
-            const timer = window.setInterval(() => {
-                remaining -= 1;
-                render();
-
-                if (remaining <= 0) {
-                    window.clearInterval(timer);
-                }
-            }, 1000);
-        })();
-    </script>
+    @livewireScripts
 </body>
 </html>

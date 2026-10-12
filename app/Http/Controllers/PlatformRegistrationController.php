@@ -7,6 +7,7 @@ use App\Mail\PlatformRegistrationVerification;
 use App\Models\Platform\PendingRegistration;
 use App\Models\Platform\RegistrationDraft;
 use App\Models\Platform\Tenant;
+use App\Services\Platform\PendingRegistrationService;
 use App\Services\Platform\PlatformInboxPublisher;
 use App\Services\Platform\PlatformSettings;
 use App\Services\Platform\TenantRegistrationService;
@@ -212,9 +213,9 @@ class PlatformRegistrationController extends Controller
         return $redirect;
     }
 
-    public function pending(Request $request): View|RedirectResponse
+    public function pending(Request $request, PendingRegistrationService $pending): View|RedirectResponse
     {
-        if (! $this->hasPendingRegistrationsTable()) {
+        if (! $pending->hasPendingRegistrationsTable()) {
             return redirect()
                 ->route('platform.register.create')
                 ->withErrors([
@@ -232,27 +233,12 @@ class PlatformRegistrationController extends Controller
                 ]);
         }
 
-        $pendingRegistration = $this->findActivePendingRegistrationByEmail($this->normalizeEmail($ownerEmail));
-
-        return view('platform.register-pending', [
-            'ownerEmail' => $ownerEmail,
-            'cooldownSecondsRemaining' => $pendingRegistration
-                ? $this->verificationCooldownSecondsRemaining($pendingRegistration)
-                : 0,
-        ]);
+        return view('platform.register-pending');
     }
 
-    public function resendVerification(Request $request): RedirectResponse
+    public function resendVerification(Request $request, PendingRegistrationService $pending): RedirectResponse
     {
-        $tooManyAttempts = $this->ensureRegistrationThrottled($request, 'registration-resend', 3, 600);
-        if ($tooManyAttempts !== null) {
-            return $tooManyAttempts;
-        }
-
-        $this->prepareRegistrationRequest();
-        $this->normalizeRegistrationInput($request);
-
-        if (! $this->hasPendingRegistrationsTable()) {
+        if (! $pending->hasPendingRegistrationsTable()) {
             return redirect()
                 ->route('platform.register.create')
                 ->withErrors([
@@ -260,11 +246,12 @@ class PlatformRegistrationController extends Controller
                 ]);
         }
 
-        $ownerEmail = $this->normalizeEmail((string) session('pending_registration_email', ''));
+        $this->prepareRegistrationRequest();
+        $this->normalizeRegistrationInput($request);
 
-        if ($ownerEmail === '') {
-            $ownerEmail = $this->normalizeEmail((string) $request->input('owner_email', ''));
-        }
+        $ownerEmail = $pending->normalizeEmail(
+            (string) ($request->input('owner_email') ?: session('pending_registration_email', ''))
+        );
 
         if ($ownerEmail === '') {
             return redirect()
@@ -274,9 +261,19 @@ class PlatformRegistrationController extends Controller
                 ]);
         }
 
-        $pendingRegistration = $this->findActivePendingRegistrationByEmail($ownerEmail);
+        $result = $pending->resend($ownerEmail, $request->ip());
 
-        if (! $pendingRegistration || ! filled($pendingRegistration->verification_token)) {
+        if ($result['throttled']) {
+            $minutes = (int) ceil(((int) $result['retry_after']) / 60);
+
+            return back()->withErrors([
+                'owner_email' => 'Terlalu banyak permintaan dalam waktu singkat. Silakan coba lagi dalam '
+                    .$minutes
+                    .' menit.',
+            ])->setStatusCode(429);
+        }
+
+        if ($result['missing']) {
             return redirect()
                 ->route('platform.register.create')
                 ->withErrors([
@@ -284,30 +281,17 @@ class PlatformRegistrationController extends Controller
                 ]);
         }
 
-        $payload = (array) ($pendingRegistration->payload ?? []);
-        $ownerName = (string) ($payload['owner_name'] ?? 'Owner');
-        $companyName = (string) ($payload['company_name'] ?? 'Tenant Baru');
-
-        $pendingRegistration->forceFill([
-            'expires_at' => now()->addHours(24),
-        ])->save();
-        $dispatchResult = $this->dispatchPendingRegistrationVerification(
-            $pendingRegistration,
-            $ownerName,
-            $companyName,
-        );
-
         $redirect = redirect()
             ->route('platform.register.pending')
             ->with('pending_registration_email', $ownerEmail)
-            ->with('registration_email_sent', $dispatchResult['sent']);
+            ->with('registration_email_sent', $result['sent']);
 
-        if ($dispatchResult['status'] !== null) {
-            $redirect->with('status', $dispatchResult['status']);
+        if ($result['status'] !== null) {
+            $redirect->with('status', $result['status']);
         }
 
-        if ($dispatchResult['warning'] !== null) {
-            $redirect->with('warning', $dispatchResult['warning']);
+        if ($result['warning'] !== null) {
+            $redirect->with('warning', $result['warning']);
         }
 
         return $redirect;

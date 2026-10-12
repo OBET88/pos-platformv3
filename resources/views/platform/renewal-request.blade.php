@@ -222,11 +222,9 @@
             }
         }
     </style>
+    @livewireStyles
 </head>
 <body>
-    @php($subscription = $tenant?->latestSubscription())
-    @php($plan = $subscription?->plan)
-
     <div class="shell">
         <div class="topbar">
             <a href="{{ route('platform.landing') }}" class="brand" aria-label="RWP POS">
@@ -242,90 +240,10 @@
             </div>
         </div>
 
-        <div class="layout">
-            <section class="panel hero">
-                <span class="eyebrow">Perpanjangan Mandiri</span>
-                <h1>Perpanjang langganan tenant langsung dari pelanggan.</h1>
-                <p class="lead">Alurnya dibuat serupa dengan pendaftaran publik: pelanggan isi data tenant, sistem membuat invoice renewal, lalu pembayaran dilanjutkan di halaman publik tanpa menunggu admin membuat invoice manual.</p>
-
-                <div class="checklist">
-                    <div class="item">
-                        <strong>1. Cocokkan identitas tenant</strong>
-                        <span>Masukkan kode tenant dan email owner yang terdaftar agar renewal hanya bisa dibuat oleh pihak yang sesuai.</span>
-                    </div>
-                    <div class="item">
-                        <strong>2. Pilih durasi tagihan</strong>
-                        <span>Pelanggan tinggal memilih bulanan, 3 bulanan, atau tahunan untuk paket yang sedang aktif dipakai tenant.</span>
-                    </div>
-                    <div class="item">
-                        <strong>3. Lanjut ke pembayaran publik</strong>
-                        <span>Begitu invoice dibuat, pelanggan langsung diarahkan ke halaman pembayaran yang sudah mendukung upload bukti transfer atau DOKU Checkout.</span>
-                    </div>
-                </div>
-
-                @if ($tenant && $plan)
-                    <div class="summary-list">
-                        <div class="summary-card">
-                            <strong>Tenant ditemukan</strong>
-                            <span>{{ $tenant->name }} ({{ $tenant->code }})</span>
-                        </div>
-                        <div class="summary-card">
-                            <strong>Paket saat ini</strong>
-                            <span>{{ $plan->name }} · Rp{{ number_format((float) $plan->price, 0, ',', '.') }}/bulan dasar</span>
-                        </div>
-                        <div class="summary-card">
-                            <strong>Status langganan</strong>
-                            <span>{{ strtoupper((string) ($subscription?->status ?? $tenant->status)) }} · Berakhir {{ optional($subscription?->expiresAt())->format('d M Y H:i') ?? '-' }}</span>
-                        </div>
-                    </div>
-                @endif
-            </section>
-
-            <section class="panel form-panel">
-                @if ($errors->any())
-                    <div class="alert alert-error">
-                        Periksa lagi data renewal yang belum cocok.
-                    </div>
-                @endif
-
-                <h2 style="margin:0 0 8px;font-size:28px;">Buat Invoice Renewal</h2>
-                <p class="muted" style="margin:0 0 18px;">Gunakan kode tenant dan email owner yang terdaftar. Sistem akan membuat invoice untuk paket yang sedang dipakai tenant.</p>
-
-                <form method="POST" action="{{ route('platform.renewal.store') }}">
-                    @csrf
-
-                    <div class="field">
-                        <label for="tenant_code">Kode Tenant</label>
-                        <input id="tenant_code" name="tenant_code" type="text" value="{{ old('tenant_code', $tenantCode) }}" placeholder="Contoh: toko-hebat" required>
-                        @error('tenant_code')<small class="field-error">{{ $message }}</small>@enderror
-                    </div>
-
-                    <div class="field">
-                        <label for="owner_email">Email Owner</label>
-                        <input id="owner_email" name="owner_email" type="email" value="{{ old('owner_email', $tenant?->owner_email) }}" placeholder="owner@bisnisanda.com" required>
-                        @error('owner_email')<small class="field-error">{{ $message }}</small>@enderror
-                    </div>
-
-                    <div class="field">
-                        <label for="billing_cycle">Siklus Renewal</label>
-                        <select id="billing_cycle" name="billing_cycle" required>
-                            <option value="monthly" @selected(old('billing_cycle') === 'monthly')>Bulanan</option>
-                            <option value="quarterly" @selected(old('billing_cycle') === 'quarterly')>3 Bulan</option>
-                            <option value="yearly" @selected(old('billing_cycle') === 'yearly')>Tahunan</option>
-                        </select>
-                        @error('billing_cycle')<small class="field-error">{{ $message }}</small>@enderror
-                    </div>
-
-                    <div class="field">
-                        <label for="notes">Catatan Tambahan</label>
-                        <textarea id="notes" name="notes" placeholder="Opsional: catatan untuk admin atau referensi invoice">{{ old('notes') }}</textarea>
-                        @error('notes')<small class="field-error">{{ $message }}</small>@enderror
-                    </div>
-
-                    <button type="submit" class="btn">Lanjut Buat Invoice Renewal</button>
-                </form>
-            </section>
-        </div>
+        @livewire('platform.public.renewal-request', [
+            'tenantCode' => $tenantCode,
+        ])
     </div>
+    @livewireScripts
 </body>
 </html>

@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Upgrade Paket Tenant</title>
+    @livewireStyles
     <style>
         :root {
             --bg: #f8fafc;
@@ -273,9 +274,6 @@
     </style>
 </head>
 <body>
-    @php($currentPlan = $subscription?->plan)
-    @php($selectedPlanId = (int) old('target_plan_id', request()->query('plan', $plans->first()?->id ?? 0)))
-    @php($selectedBillingCycle = (string) old('billing_cycle', request()->query('billing_cycle', 'monthly')))
 
     <div class="shell">
         <div class="topbar">
@@ -293,185 +291,13 @@
             </div>
         </div>
 
-        <div class="layout">
-            <section class="panel hero">
-                <span class="eyebrow">Upgrade Mandiri</span>
-                <h1>Upgrade paket tenant langsung dari pelanggan.</h1>
-                <p class="lead">Flow ini tidak perlu menunggu admin membuat invoice manual. Pelanggan cukup cocokkan identitas tenant, pilih paket yang lebih tinggi, lihat nominal tagihan upgrade, lalu lanjut bayar dari halaman publik.</p>
-
-                <div class="checklist">
-                    <div class="item">
-                        <strong>1. Verifikasi tenant dan owner</strong>
-                        <span>Kode tenant dan email owner harus cocok agar upgrade hanya bisa diproses oleh pihak yang sah.</span>
-                    </div>
-                    <div class="item">
-                        <strong>2. Pilih paket tujuan</strong>
-                        <span>Hanya paket aktif yang lebih tinggi dari paket saat ini yang akan ditampilkan sebagai opsi upgrade.</span>
-                    </div>
-                    <div class="item">
-                        <strong>3. Tagihan muncul sebelum submit</strong>
-                        <span>Nominal dihitung otomatis dari selisih paket lama ke paket baru sesuai siklus billing yang dipilih.</span>
-                    </div>
-                </div>
-
-                @if ($tenant && $currentPlan)
-                    <div class="summary-list">
-                        <div class="summary-card">
-                            <strong>Tenant ditemukan</strong>
-                            <span>{{ $tenant->name }} ({{ $tenant->code }})</span>
-                        </div>
-                        <div class="summary-card">
-                            <strong>Paket saat ini</strong>
-                            <span>{{ $currentPlan->name }} - Rp{{ number_format((float) $currentPlan->price, 0, ',', '.') }}/bulan dasar</span>
-                        </div>
-                        <div class="summary-card">
-                            <strong>Status langganan</strong>
-                            <span>{{ strtoupper((string) ($subscription?->status ?? $tenant->status)) }} - Berakhir {{ optional($subscription?->expiresAt())->format('d M Y H:i') ?? '-' }}</span>
-                        </div>
-                    </div>
-
-                    @if ($plans->isNotEmpty())
-                        <div class="plan-list">
-                            @foreach ($plans as $plan)
-                                <div class="plan-card">
-                                    <strong>{{ $plan->name }}</strong>
-                                    <span>Paket tujuan upgrade dengan kapasitas lebih besar untuk tenant aktif.</span>
-                                    <div class="plan-price">Rp{{ number_format((float) $plan->price, 0, ',', '.') }}/bulan dasar</div>
-                                    <div class="plan-meta">
-                                        <span class="pill">{{ $plan->max_branches }} cabang</span>
-                                        <span class="pill">{{ $plan->max_users }} user</span>
-                                        <span class="pill">{{ $plan->max_businesses }} bisnis</span>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-                    @else
-                        <div class="summary-list">
-                            <div class="summary-card">
-                                <strong>Belum ada opsi upgrade</strong>
-                                <span>Tidak ditemukan paket aktif yang lebih tinggi dari paket tenant saat ini.</span>
-                            </div>
-                        </div>
-                    @endif
-                @endif
-            </section>
-
-            <section class="panel form-panel">
-                @if ($errors->any())
-                    <div class="alert alert-error">
-                        Periksa lagi data upgrade yang belum cocok.
-                    </div>
-                @endif
-
-                <h2 style="margin:0 0 8px;font-size:28px;">Buat Invoice Upgrade</h2>
-                <p class="muted" style="margin:0 0 18px;">Pilih paket tujuan dan lihat estimasi nominal sebelum membuat invoice upgrade.</p>
-
-                <form method="POST" action="{{ route('platform.upgrade.store') }}">
-                    @csrf
-
-                    <div class="field">
-                        <label for="tenant_code">Kode Tenant</label>
-                        <input id="tenant_code" name="tenant_code" type="text" value="{{ old('tenant_code', $tenantCode) }}" placeholder="Contoh: toko-hebat" required>
-                        @error('tenant_code')<small class="field-error">{{ $message }}</small>@enderror
-                    </div>
-
-                    <div class="field">
-                        <label for="owner_email">Email Owner</label>
-                        <input id="owner_email" name="owner_email" type="email" value="{{ old('owner_email', $tenant?->owner_email) }}" placeholder="owner@bisnisanda.com" required>
-                        @error('owner_email')<small class="field-error">{{ $message }}</small>@enderror
-                    </div>
-
-                    <div class="field">
-                        <label for="target_plan_id">Paket Tujuan</label>
-                        <select id="target_plan_id" name="target_plan_id" @disabled($plans->isEmpty()) required>
-                            <option value="">Pilih paket upgrade</option>
-                            @foreach ($plans as $plan)
-                                <option
-                                    value="{{ $plan->id }}"
-                                    data-price="{{ (float) $plan->price }}"
-                                    @selected($selectedPlanId === $plan->id)
-                                >
-                                    {{ $plan->name }} - Rp{{ number_format((float) $plan->price, 0, ',', '.') }}/bulan
-                                </option>
-                            @endforeach
-                        </select>
-                        @error('target_plan_id')<small class="field-error">{{ $message }}</small>@enderror
-                    </div>
-
-                    <div class="field">
-                        <label for="billing_cycle">Siklus Billing Upgrade</label>
-                        <select id="billing_cycle" name="billing_cycle" required>
-                            <option value="monthly" @selected($selectedBillingCycle === 'monthly')>Bulanan</option>
-                            <option value="quarterly" @selected($selectedBillingCycle === 'quarterly')>3 Bulan</option>
-                            <option value="yearly" @selected($selectedBillingCycle === 'yearly')>Tahunan</option>
-                        </select>
-                        @error('billing_cycle')<small class="field-error">{{ $message }}</small>@enderror
-                    </div>
-
-                    <div class="preview-card">
-                        <strong>Estimasi tagihan upgrade</strong>
-                        <span>Nominal dihitung dari selisih paket saat ini ke paket tujuan sesuai siklus billing yang dipilih.</span>
-                        <div id="upgrade-amount" class="preview-amount">Rp0</div>
-                        <span id="upgrade-summary" class="muted">Pilih paket tujuan untuk melihat estimasi tagihan.</span>
-                    </div>
-
-                    <div class="field">
-                        <label for="notes">Catatan Tambahan</label>
-                        <textarea id="notes" name="notes" placeholder="Opsional: catatan untuk admin atau referensi invoice">{{ old('notes') }}</textarea>
-                        @error('notes')<small class="field-error">{{ $message }}</small>@enderror
-                    </div>
-
-                    <button type="submit" class="btn" @disabled($plans->isEmpty())>Lanjut Buat Invoice Upgrade</button>
-                </form>
-            </section>
-        </div>
+        @livewire('platform.public.upgrade-request', [
+            'tenantCode' => $tenantCode,
+            'plan' => $selectedPlanId,
+            'billingCycle' => $selectedBillingCycle,
+        ])
     </div>
 
-    <script>
-        (function () {
-            const currentPlanPrice = {{ json_encode((float) ($currentPlan?->price ?? 0)) }};
-            const planSelect = document.getElementById('target_plan_id');
-            const billingCycleSelect = document.getElementById('billing_cycle');
-            const amountNode = document.getElementById('upgrade-amount');
-            const summaryNode = document.getElementById('upgrade-summary');
-
-            if (!planSelect || !billingCycleSelect || !amountNode || !summaryNode) {
-                return;
-            }
-
-            const formatter = new Intl.NumberFormat('id-ID');
-            const multipliers = {
-                monthly: 1,
-                quarterly: 3,
-                yearly: 12,
-            };
-            const labels = {
-                monthly: '1 bulan',
-                quarterly: '3 bulan',
-                yearly: '12 bulan',
-            };
-
-            const updateAmount = () => {
-                const option = planSelect.options[planSelect.selectedIndex];
-                const targetPrice = Number(option?.dataset?.price || 0);
-                const cycle = billingCycleSelect.value || 'monthly';
-                const multiplier = multipliers[cycle] || 1;
-                const amount = Math.max(0, (targetPrice - currentPlanPrice) * multiplier);
-
-                amountNode.textContent = 'Rp' + formatter.format(amount);
-
-                if (!option || !option.value) {
-                    summaryNode.textContent = 'Pilih paket tujuan untuk melihat estimasi tagihan.';
-                    return;
-                }
-
-                summaryNode.textContent = 'Tagihan upgrade dihitung untuk ' + labels[cycle] + ' berdasarkan selisih harga paket lama dan paket baru.';
-            };
-
-            planSelect.addEventListener('change', updateAmount);
-            billingCycleSelect.addEventListener('change', updateAmount);
-            updateAmount();
-        }());
-    </script>
+    @livewireScripts
 </body>
 </html>
