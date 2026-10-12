@@ -356,6 +356,47 @@
             margin: 10mm;
         }
 
+        /* Layar kecil: invoice A4 dibuat fluid agar tidak overflow di ponsel. */
+        .table-scroll {
+            width: 100%;
+        }
+
+        @media screen and (max-width: 900px) {
+            .page {
+                width: 100%;
+                min-height: 0;
+                margin: 12px auto 24px;
+                padding: 16px 14px;
+            }
+
+            .header,
+            .meta,
+            .meta-row,
+            .summary,
+            .totals-row,
+            .footer {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .invoice-title-row::before,
+            .invoice-title-row::after {
+                display: none;
+            }
+
+            .table-scroll {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            table {
+                min-width: 520px;
+            }
+
+            .grand-total strong {
+                font-size: 18px;
+            }
+        }
+
         @media print {
             body {
                 background: #fff;
@@ -440,6 +481,7 @@
             </div>
         </section>
 
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
@@ -472,6 +514,7 @@
                 </tr>
             </tbody>
         </table>
+        </div>
 
         <section class="summary">
             <div class="notes">

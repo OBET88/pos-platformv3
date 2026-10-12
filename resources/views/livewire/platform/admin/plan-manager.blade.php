@@ -175,7 +175,7 @@
                                     <span class="text-sm text-slate-600">Kunci awal</span>
                                     <span class="text-sm font-semibold text-slate-900">{{ $this->packageFeatureCount($selectedPreset['features']) }}</span>
                                 </div>
-                                <div class="grid grid-cols-3 gap-2 text-center">
+                                <div class="grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
                                     <div class="rounded-2xl bg-slate-50 px-3 py-3">
                                         <p class="text-[11px] uppercase tracking-wide text-slate-400">Bisnis</p>
                                         <p class="mt-1 text-sm font-semibold text-slate-900">{{ number_format($selectedPreset['limits']['max_businesses'] ?? 1) }}</p>
@@ -246,7 +246,7 @@
                         </div>
                     </div>
 
-                    <div class="mt-4 grid grid-cols-3 gap-3 text-sm">
+                    <div class="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                         <div class="rounded-2xl bg-white px-3 py-3 ring-1 ring-slate-200">
                             <p class="text-[11px] uppercase tracking-wide text-slate-400">Bisnis</p>
                             <p class="mt-1 font-semibold text-slate-900">{{ number_format($plan->max_businesses) }}</p>

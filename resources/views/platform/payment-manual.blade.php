@@ -375,10 +375,11 @@
         }
 
         .invoice-total {
-            font-size: 34px;
+            font-size: clamp(22px, 7vw, 34px);
             font-weight: 800;
             color: #111827;
             line-height: 1.05;
+            overflow-wrap: anywhere;
         }
 
         @media print {
@@ -425,6 +426,7 @@
         @media (max-width: 980px) {
             .layout,
             .invoice-meta,
+            .invoice-sheet-grid,
             .payment-destination-grid {
                 grid-template-columns: 1fr;
             }
@@ -673,16 +675,20 @@
                         </div>
                     @endif
 
-                    <h2 style="margin:0 0 8px;font-size:26px;">Upload Bukti Bayar</h2>
-                    <p class="helper" style="margin:0 0 18px;">Isi nama pengirim, nominal transfer, tanggal transfer, lalu lampirkan bukti pembayaran. Begitu terkirim, status invoice otomatis berubah ke `waiting_validation`.</p>
-
                     @if ($dokuEnabled && $transaction->status !== 'paid')
-                        <form method="POST" action="{{ route('platform.payment.doku', ['invoiceNumber' => $transaction->invoice_number]) }}" style="margin-bottom:18px;">
+                        <h2 style="margin:0 0 8px;font-size:26px;">Pembayaran Otomatis</h2>
+                        <p class="helper" style="margin:0 0 18px;">
+                            Bayar lewat QRIS, Virtual Account, atau e-wallet. Begitu pembayaran masuk, sistem
+                            <strong>langsung memverifikasi sendiri</strong> — tanpa menunggu admin — dan invoice ini lunas otomatis{{ $isRegistrationFlow ? ', lalu setup tenant mulai dijalankan' : '' }}.
+                        </p>
+                        <form method="POST" action="{{ route('platform.payment.doku', ['invoiceNumber' => $transaction->invoice_number]) }}" style="margin-bottom:24px;">
                             @csrf
-                            <button type="submit" class="btn" style="width:100%;">Bayar via DOKU Checkout</button>
+                            <button type="submit" class="btn" style="width:100%;">Bayar Sekarang</button>
                         </form>
-                        <p class="helper" style="margin:0 0 18px;">Kalau ingin pembayaran otomatis, gunakan DOKU Checkout. Setelah DOKU mengirim notifikasi sukses, invoice ini akan diproses tanpa upload bukti transfer manual{{ $isRegistrationFlow ? ' dan setup tenant akan mulai dijalankan.' : '.' }}</p>
                     @endif
+
+                    <h2 style="margin:0 0 8px;font-size:26px;">Transfer Manual</h2>
+                    <p class="helper" style="margin:0 0 18px;">Transfer ke rekening di atas, lalu isi nama pengirim, nominal transfer, tanggal transfer, dan lampirkan bukti pembayaran. Tim admin akan memverifikasi (biasanya 1×24 jam) sebelum invoice ini lunas.</p>
 
                     <form method="POST" action="{{ route('platform.payment.proof', ['invoiceNumber' => $transaction->invoice_number]) }}" enctype="multipart/form-data">
                         @csrf

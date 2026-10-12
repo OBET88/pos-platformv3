@@ -11,6 +11,11 @@
 }
 
 @layer base {
+    /* Sembunyikan elemen ber-x-cloak sebelum Alpine siap (mencegah kedip). */
+    [x-cloak] {
+        display: none !important;
+    }
+
     :root {
         --platform-ink: #e2e8f0;
         --platform-muted: #94a3b8;
@@ -82,6 +87,52 @@
         background:
             linear-gradient(180deg, rgba(2, 6, 23, 0.98) 0%, rgba(15, 23, 42, 0.94) 100%);
         color: var(--platform-ink);
+    }
+
+    /* --- Sidebar admin: off-canvas di ponsel, kolom tetap di desktop --- */
+    .platform-nav-backdrop {
+        display: none;
+    }
+
+    .platform-nav-close {
+        display: none;
+    }
+
+    @media (max-width: 1023.98px) {
+        .platform-sidebar {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 60;
+            width: min(288px, 86vw);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            transform: translateX(-100%);
+            transition: transform 200ms ease;
+            box-shadow: 0 24px 70px rgba(2, 6, 23, 0.5);
+        }
+
+        .platform-sidebar[data-nav-open='true'] {
+            transform: translateX(0);
+        }
+
+        .platform-nav-backdrop {
+            display: block;
+            position: fixed;
+            inset: 0;
+            z-index: 55;
+            background: rgba(2, 6, 23, 0.62);
+            backdrop-filter: blur(2px);
+        }
+
+        .platform-nav-backdrop[hidden] {
+            display: none;
+        }
+
+        .platform-nav-close {
+            display: inline-flex;
+        }
     }
 
     .platform-panel {
@@ -212,15 +263,23 @@
         color: #94a3b8;
     }
 
+    /* Header halaman: sticky hanya di desktop. Di ponsel header yang menempel
+       memakan tinggi layar karena tombolnya membungkus jadi banyak baris. */
     .platform-page-header {
-        position: sticky;
-        top: 0;
-        z-index: 20;
+        position: static;
         margin-bottom: 1.5rem;
         border: 1px solid rgba(255, 255, 255, 0.08);
         background: rgba(15, 23, 42, 0.76);
         color: #e2e8f0;
         backdrop-filter: blur(18px);
+    }
+
+    @media (min-width: 1024px) {
+        .platform-page-header {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
     }
 
     .public-ui-link:hover,

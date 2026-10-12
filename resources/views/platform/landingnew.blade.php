@@ -207,9 +207,23 @@
 
         .platform-footer-grid {
             display: grid;
-            grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 28px;
             align-items: start;
+        }
+
+        .platform-footer-grid > :first-child {
+            grid-column: span 2;
+        }
+
+        @media (max-width: 991px) {
+            .platform-footer-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .platform-footer-grid > :first-child {
+                grid-column: span 2;
+            }
         }
 
         .platform-footer-list {

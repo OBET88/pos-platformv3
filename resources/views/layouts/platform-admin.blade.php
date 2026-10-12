@@ -34,6 +34,10 @@
                 box-sizing: border-box;
             }
 
+            [x-cloak] {
+                display: none !important;
+            }
+
             html,
             body {
                 margin: 0;
@@ -202,9 +206,8 @@
             }
 
             .platform-page-header {
-                position: sticky;
-                top: 0;
-                z-index: 20;
+                /* Sticky hanya di desktop (lihat @media min-width:1024px di bawah). */
+                position: static;
                 margin-bottom: 24px;
                 border: 1px solid rgba(255, 255, 255, 0.08);
                 background: rgba(15, 23, 42, 0.76);
@@ -213,6 +216,14 @@
                 border-radius: 24px;
                 padding: 20px 24px;
                 box-shadow: 0 18px 48px rgba(2, 6, 23, 0.18);
+            }
+
+            @media (min-width: 1024px) {
+                .platform-page-header {
+                    position: sticky;
+                    top: 0;
+                    z-index: 20;
+                }
             }
 
             [data-ui-submit][disabled],
@@ -845,12 +856,51 @@
             ->first()
         : null)
 
-    <div class="min-h-screen lg:grid lg:grid-cols-[300px_minmax(0,1fr)] {{ $hasViteAssets ? '' : 'platform-admin-fallback' }}">
-        <aside class="platform-sidebar border-b border-white/10 px-5 py-5 lg:border-b-0 lg:border-r lg:px-6 lg:py-6">
+    <div
+        x-data="{ navOpen: false }"
+        x-on:keydown.escape.window="navOpen = false"
+        class="min-h-screen {{ $hasViteAssets ? '' : 'platform-admin-fallback' }}"
+    >
+        {{-- Top bar ponsel: sidebar jadi drawer agar konten tidak terdorong jauh ke bawah. --}}
+        <header class="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur lg:hidden">
+            <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,0.9)]"></span>
+                <span class="text-sm font-semibold text-white">POS Platform</span>
+            </div>
+            <button
+                type="button"
+                x-on:click="navOpen = true"
+                class="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-100"
+                aria-label="Buka menu navigasi"
+            >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M4 7h16M4 12h16M4 17h16" />
+                </svg>
+                Menu
+            </button>
+        </header>
+
+        <div class="lg:grid lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside
+            class="platform-sidebar border-b border-white/10 px-5 py-5 lg:border-b-0 lg:border-r lg:px-6 lg:py-6"
+            x-bind:data-nav-open="navOpen ? 'true' : 'false'"
+        >
             <div class="platform-panel rounded-[1.75rem] p-5">
-                <div class="inline-flex items-center gap-3 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200">
-                    <span class="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,0.9)]"></span>
-                    POS Platform
+                <div class="flex items-center justify-between gap-3">
+                    <div class="inline-flex items-center gap-3 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200">
+                        <span class="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,0.9)]"></span>
+                        POS Platform
+                    </div>
+                    <button
+                        type="button"
+                        x-on:click="navOpen = false"
+                        class="platform-nav-close items-center justify-center rounded-xl border border-white/15 bg-white/5 p-2 text-slate-200"
+                        aria-label="Tutup menu navigasi"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                            <path d="M6 6l12 12M18 6L6 18" />
+                        </svg>
+                    </button>
                 </div>
 
                 <div class="mt-5 space-y-3">
@@ -889,6 +939,7 @@
                         'items' => [
                             ['key' => 'plans', 'label' => 'Paket & Fitur', 'hint' => 'Langganan', 'route' => 'platform.admin.plans.index', 'match' => 'platform.admin.plans.*'],
                             ['key' => 'registration', 'label' => 'Pengaturan Pendaftaran', 'hint' => 'Form publik', 'route' => 'platform.admin.settings.registration', 'match' => 'platform.admin.settings.registration'],
+                            ['key' => 'subscription_gateway', 'label' => 'Gateway Langganan', 'hint' => 'DOKU platform', 'route' => 'platform.admin.settings.subscription-gateway', 'match' => 'platform.admin.settings.subscription-gateway'],
                             ['key' => 'gateways', 'label' => 'Payment Gateway', 'hint' => 'Credential per tenant', 'route' => 'platform.admin.gateways.index', 'match' => 'platform.admin.gateways.index'],
                         ],
                     ],
@@ -923,7 +974,7 @@
                         <p class="px-3 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">{{ $group['label'] }}</p>
                         @foreach ($group['items'] as $item)
                             @php($active = request()->routeIs($item['match']))
-                            <a href="{{ route($item['route']) }}" wire:navigate class="platform-nav-link {{ $active ? 'is-active' : '' }}">
+                            <a href="{{ route($item['route']) }}" wire:navigate x-on:click="navOpen = false" class="platform-nav-link {{ $active ? 'is-active' : '' }}">
                                 <span class="flex flex-col">
                                     <span>{{ $item['label'] }}</span>
                                     <span class="text-[11px] font-normal {{ $active ? 'text-emerald-950/70' : 'text-slate-500' }}">{{ $item['hint'] }}</span>
@@ -957,6 +1008,9 @@
                 </form>
             </div>
         </aside>
+        </div>
+
+        <div class="platform-nav-backdrop" x-show="navOpen" x-cloak x-on:click="navOpen = false" aria-hidden="true"></div>
 
         <main class="px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
             <div class="platform-page-header rounded-[1.5rem] px-5 py-4 shadow-[0_18px_48px_rgba(2,6,23,0.18)]">
