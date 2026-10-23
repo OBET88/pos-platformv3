@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="id">
 <head>
+    <meta name="referrer" content="no-referrer">
     <meta charset="utf-8">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <title>Invoice Pembayaran | RWP POS</title>
@@ -440,7 +441,6 @@
     @php($isWaitingValidationLike = $transaction->status === 'waiting_validation' && ! $latestRejectedProof)
     @php($isInvoiceOnlyState = ($isPaidLike || $isWaitingValidationLike) && ! $latestRejectedProof)
     @php($isRegistrationFlow = $transaction->type === 'registration')
-    @php($registrationStatusUrl = $isRegistrationFlow && $transaction->tenant ? route('platform.register.success', ['tenant' => $transaction->tenant->code]) : null)
 
     <div class="shell">
         <div class="topbar">

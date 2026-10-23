@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Mail;
+use App\Models\Platform\TenantOnboardingJob;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -23,7 +25,6 @@ class PlatformRegistrationThrottleTest extends TestCase
         Mail::fake();
         RateLimiter::clear('registration-store:corban@example.com|127.0.0.1');
         RateLimiter::clear('registration-resend:corban@example.com|127.0.0.1');
-        RateLimiter::clear('registration-bootstrap:127.0.0.1');
     }
 
     private function validPayload(): array
@@ -95,14 +96,24 @@ class PlatformRegistrationThrottleTest extends TestCase
             'owner_email' => 'owner@throttle.test',
             'status' => 'pending_provisioning',
         ]);
+        $accessToken = Str::random(80);
+        TenantOnboardingJob::query()->create([
+            'tenant_id' => $tenant->id,
+            'status' => 'queued',
+            'payload' => [],
+            'access_token_hash' => hash('sha256', $accessToken),
+            'access_expires_at' => now()->addHour(),
+            'available_at' => now(),
+        ]);
+        RateLimiter::clear('registration-bootstrap:'.$tenant->id.':127.0.0.1');
 
         $lastResponse = null;
 
         for ($i = 0; $i < 10; $i++) {
-            $lastResponse = $this->postJson(route('platform.register.bootstrap', ['tenant' => $tenant->code]));
+            $lastResponse = $this->postJson(route('platform.register.bootstrap', ['tenant' => $tenant->code]), ['access' => $accessToken]);
         }
 
-        $lastResponse = $this->postJson(route('platform.register.bootstrap', ['tenant' => $tenant->code]));
+        $lastResponse = $this->postJson(route('platform.register.bootstrap', ['tenant' => $tenant->code]), ['access' => $accessToken]);
 
         $lastResponse->assertStatus(429);
         $lastResponse->assertJsonPath('status', 'throttled');

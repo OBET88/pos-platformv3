@@ -88,18 +88,26 @@ class DokuCheckoutService
             return false;
         }
 
-        $payload = json_decode($rawBody, true);
-
-        if (! is_array($payload)) {
+        if (! hash_equals((string) ($config['client_id'] ?? ''), $clientId)) {
             return false;
         }
 
-        $expectedSignature = $this->generateSignature(
+        try {
+            $requestTimestamp = Carbon::parse($timestamp);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        if (now()->diffInSeconds($requestTimestamp, true) > 600) {
+            return false;
+        }
+
+        $expectedSignature = $this->generateSignatureForRawBody(
             clientId: $clientId,
             requestId: $requestId,
             timestamp: $timestamp,
             requestTarget: $requestTarget,
-            body: $payload,
+            rawBody: $rawBody,
             secretKey: $config['secret_key'],
         );
 
@@ -205,6 +213,26 @@ class DokuCheckoutService
         }
 
         $digest = base64_encode(hash('sha256', $minifiedBody, true));
+        $components = implode("\n", [
+            'Client-Id:'.$clientId,
+            'Request-Id:'.$requestId,
+            'Request-Timestamp:'.$timestamp,
+            'Request-Target:'.$requestTarget,
+            'Digest:'.$digest,
+        ]);
+
+        return 'HMACSHA256='.base64_encode(hash_hmac('sha256', $components, $secretKey, true));
+    }
+
+    private function generateSignatureForRawBody(
+        string $clientId,
+        string $requestId,
+        string $timestamp,
+        string $requestTarget,
+        string $rawBody,
+        string $secretKey,
+    ): string {
+        $digest = base64_encode(hash('sha256', $rawBody, true));
         $components = implode("\n", [
             'Client-Id:'.$clientId,
             'Request-Id:'.$requestId,

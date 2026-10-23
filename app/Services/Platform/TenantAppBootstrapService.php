@@ -56,128 +56,101 @@ class TenantAppBootstrapService
 
         $driver = $databaseConfig->db_host === 'sqlite' ? 'sqlite' : 'mysql';
         $migrationSnapshot = $this->createTenantMigrationSnapshot($tenantAppPath, $tenant);
-        [$tenant, $databaseConfig, $connectivityCheck, $childProcessCheck, $recoveryActions] = $this->prepareBootstrapTarget(
-            $tenant,
-            $databaseConfig,
-            $driver,
-            $phpBinary,
-            $tenantAppPath,
-        );
+        $bootstrapInputPath = null;
 
-        $processCommand = $this->buildProcessCommand($databaseConfig, $payload, $phpBinary, $driver, $migrationSnapshot);
-
-        [$process, $attempts] = $this->runBootstrapProcess($processCommand, $tenantAppPath, $databaseConfig, $driver);
-        $bootstrapVerified = $this->verifyBootstrapOutcome($databaseConfig, $driver, (string) $payload['owner_email']);
-
-        if (
-            !$process->isSuccessful()
-            && !$bootstrapVerified
-            && $driver === 'mysql'
-            && (
-                $this->shouldAttemptRecoveryAfterBootstrapFailure($process)
-                || !$this->hasBootstrapProgress($databaseConfig, $driver)
-            )
-        ) {
-            [$tenant, $databaseConfig, $connectivityCheck, $childProcessCheck, $recoveryAction] = $this->recoverTenantDatabase(
+        try {
+            $bootstrapInputPath = $this->createBootstrapInputFile($databaseConfig, $payload, $driver, $migrationSnapshot);
+            [$tenant, $databaseConfig, $connectivityCheck, $childProcessCheck, $recoveryActions] = $this->prepareBootstrapTarget(
                 $tenant,
+                $databaseConfig,
                 $driver,
-                'post_bootstrap_failure',
-                $process->getErrorOutput() !== '' ? trim($process->getErrorOutput()) : trim($process->getOutput()),
                 $phpBinary,
                 $tenantAppPath,
+                $bootstrapInputPath,
             );
 
-            $recoveryActions[] = $recoveryAction;
-            $processCommand = $this->buildProcessCommand($databaseConfig, $payload, $phpBinary, $driver, $migrationSnapshot);
+            $this->refreshBootstrapInputFile($bootstrapInputPath, $databaseConfig, $payload, $driver, $migrationSnapshot);
+
+            $processCommand = $this->buildProcessCommand($phpBinary, $bootstrapInputPath);
             [$process, $attempts] = $this->runBootstrapProcess($processCommand, $tenantAppPath, $databaseConfig, $driver);
             $bootstrapVerified = $this->verifyBootstrapOutcome($databaseConfig, $driver, (string) $payload['owner_email']);
+
+            if (
+                !$process->isSuccessful()
+                && !$bootstrapVerified
+                && $driver === 'mysql'
+                && (
+                    $this->shouldAttemptRecoveryAfterBootstrapFailure($process)
+                    || !$this->hasBootstrapProgress($databaseConfig, $driver)
+                )
+            ) {
+                [$tenant, $databaseConfig, $connectivityCheck, $childProcessCheck, $recoveryAction] = $this->recoverTenantDatabase(
+                    $tenant,
+                    $driver,
+                    'post_bootstrap_failure',
+                    $process->getErrorOutput() !== '' ? trim($process->getErrorOutput()) : trim($process->getOutput()),
+                    $phpBinary,
+                    $tenantAppPath,
+                    $bootstrapInputPath,
+                );
+
+                $recoveryActions[] = $recoveryAction;
+                $this->refreshBootstrapInputFile($bootstrapInputPath, $databaseConfig, $payload, $driver, $migrationSnapshot);
+                $processCommand = $this->buildProcessCommand($phpBinary, $bootstrapInputPath);
+                [$process, $attempts] = $this->runBootstrapProcess($processCommand, $tenantAppPath, $databaseConfig, $driver);
+                $bootstrapVerified = $this->verifyBootstrapOutcome($databaseConfig, $driver, (string) $payload['owner_email']);
+            }
+
+            $bootstrapSucceeded = $process->isSuccessful() || $bootstrapVerified;
+
+            if ($bootstrapSucceeded) {
+                $this->syncOwnerEmailVerification($databaseConfig, $driver, $payload);
+            }
+
+            $migrationSnapshotCleanup = $bootstrapSucceeded
+                ? $this->cleanupTenantMigrationSnapshot($migrationSnapshot)
+                : ['status' => 'retained_for_debugging'];
+
+            TenantProvisionLog::query()->create([
+                'tenant_id' => $tenant->getKey(),
+                'step' => 'tenant_app_bootstrap',
+                'status' => $bootstrapSucceeded ? 'completed' : 'failed',
+                'message' => $bootstrapSucceeded
+                    ? ($process->isSuccessful()
+                        ? 'Tenant app berhasil dibootstrap dan owner awal sudah dibuat.'
+                        : 'Tenant app berhasil diverifikasi selesai walau process bootstrap sempat mengembalikan error.')
+                    : 'Bootstrap tenant app gagal dijalankan.',
+                'payload' => [
+                    'transport' => 'one_time_bootstrap_input',
+                    'driver' => $driver,
+                    'attempts' => $attempts,
+                    'bootstrap_verified' => $bootstrapVerified,
+                    'connectivity_status' => $connectivityCheck['status'] ?? null,
+                    'child_process_status' => $childProcessCheck['status'] ?? null,
+                    'recovery_actions' => $recoveryActions,
+                    'migration_snapshot_file_count' => $migrationSnapshot['file_count'] ?? null,
+                    'migration_snapshot_cleanup' => $migrationSnapshotCleanup,
+                    'failure_category' => $bootstrapSucceeded ? null : $this->bootstrapFailureCategory($process),
+                    'actor_id' => Auth::id(),
+                    'actor_email' => Auth::user()?->email,
+                ],
+            ]);
+
+            if (!$bootstrapSucceeded) {
+                throw new RuntimeException($this->resolveBootstrapFailureMessage($process, $connectivityCheck, $attempts));
+            }
+
+            return $tenant->fresh(['subscriptions.plan', 'domains', 'databaseConfigs', 'provisionLogs']);
+        } finally {
+            if ($bootstrapInputPath !== null) {
+                File::delete($bootstrapInputPath);
+            }
         }
-
-        $bootstrapSucceeded = $process->isSuccessful() || $bootstrapVerified;
-
-        if ($bootstrapSucceeded) {
-            $this->syncOwnerEmailVerification($databaseConfig, $driver, $payload);
-        }
-
-        $migrationSnapshotCleanup = $bootstrapSucceeded
-            ? $this->cleanupTenantMigrationSnapshot($migrationSnapshot)
-            : [
-                'status' => 'retained_for_debugging',
-                'path' => $migrationSnapshot['path'] ?? null,
-            ];
-
-        TenantProvisionLog::query()->create([
-            'tenant_id' => $tenant->getKey(),
-            'step' => 'tenant_app_bootstrap',
-            'status' => $bootstrapSucceeded ? 'completed' : 'failed',
-            'message' => $bootstrapSucceeded
-                ? ($process->isSuccessful()
-                    ? 'Tenant app berhasil dibootstrap dan owner awal sudah dibuat.'
-                    : 'Tenant app berhasil diverifikasi selesai walau process bootstrap sempat mengembalikan error.')
-                : 'Bootstrap tenant app gagal dijalankan.',
-            'payload' => [
-                'driver' => $driver,
-                'command' => $process->getCommandLine(),
-                'attempts' => $attempts,
-                'bootstrap_verified' => $bootstrapVerified,
-                'connectivity_check' => $connectivityCheck,
-                'child_process_check' => $childProcessCheck,
-                'recovery_actions' => $recoveryActions,
-                'migration_snapshot' => $migrationSnapshot,
-                'migration_snapshot_cleanup' => $migrationSnapshotCleanup,
-                'output' => trim($process->getOutput()),
-                'error_output' => trim($process->getErrorOutput()),
-                'actor_id' => Auth::id(),
-                'actor_email' => Auth::user()?->email,
-            ],
-        ]);
-
-        if (!$bootstrapSucceeded) {
-            throw new RuntimeException($this->resolveBootstrapFailureMessage($process, $connectivityCheck, $attempts));
-        }
-
-        return $tenant->fresh(['subscriptions.plan', 'domains', 'databaseConfigs', 'provisionLogs']);
     }
 
     public function startBootstrapInBackground(Tenant $tenant, array $payload): void
     {
-        $tenant = $tenant->fresh(['databaseConfigs']);
-        $databaseConfig = $tenant?->databaseConfigs?->sortByDesc('id')->first();
-
-        if (!$tenant || !$databaseConfig || !$databaseConfig->db_name) {
-            throw new RuntimeException('Tenant belum punya database config yang siap dibootstrap.');
-        }
-
-        $tenantAppPath = $this->resolveTenantAppPath((string) config('platform.tenant_app_path'));
-        $phpBinary = $this->resolvePhpBinary((string) config('platform.tenant_app_php_binary', PHP_BINARY));
-
-        if ($tenantAppPath === '' || !is_dir($tenantAppPath)) {
-            throw new RuntimeException('Path tenant app belum valid. Atur PLATFORM_TENANT_APP_PATH lebih dulu.');
-        }
-
-        $driver = $databaseConfig->db_host === 'sqlite' ? 'sqlite' : 'mysql';
-        $migrationSnapshot = $this->createTenantMigrationSnapshot($tenantAppPath, $tenant);
-        $processCommand = $this->buildProcessCommand($databaseConfig, $payload, $phpBinary, $driver, $migrationSnapshot);
-
-        TenantProvisionLog::query()->updateOrCreate([
-            'tenant_id' => $tenant->getKey(),
-            'step' => 'tenant_app_bootstrap',
-        ], [
-            'status' => 'pending',
-            'message' => 'Bootstrap tenant app sedang dijalankan di background.',
-            'payload' => [
-                'driver' => $driver,
-                'command' => implode(' ', array_map(
-                    fn (string $argument) => DIRECTORY_SEPARATOR === '\\'
-                        ? $this->quoteForCmd($this->trimWrappingQuotes($argument))
-                        : $argument,
-                    $processCommand
-                )),
-                'migration_snapshot' => $migrationSnapshot,
-            ],
-        ]);
-
-        $this->launchBackgroundProcess($processCommand, $tenantAppPath);
+        throw new RuntimeException('Bootstrap background tidak didukung. Jalankan bootstrap melalui worker onboarding terjadwal.');
     }
 
     public function finalizeBootstrapIfReady(Tenant $tenant, array $payload): bool
@@ -232,6 +205,7 @@ class TenantAppBootstrapService
         string $driver,
         string $phpBinary,
         string $tenantAppPath,
+        string $bootstrapInputPath,
     ): array {
         $recoveryActions = [];
 
@@ -249,6 +223,7 @@ class TenantAppBootstrapService
                 $exception->getMessage(),
                 $phpBinary,
                 $tenantAppPath,
+                $bootstrapInputPath,
             );
 
             $recoveryActions[] = $recoveryAction;
@@ -259,11 +234,11 @@ class TenantAppBootstrapService
         $childProcessCheck = null;
 
         if ($driver === 'mysql') {
-            $childProcessCheck = $this->probeTenantDatabaseViaChildProcess($databaseConfig, $phpBinary, $tenantAppPath);
+            $childProcessCheck = $this->probeTenantDatabaseViaChildProcess($bootstrapInputPath, $phpBinary, $tenantAppPath);
 
             if (($childProcessCheck['status'] ?? null) !== 'ok') {
                 $childProcessCheck = $this->waitForStableChildProcessConnectivity(
-                    $databaseConfig,
+                    $bootstrapInputPath,
                     $phpBinary,
                     $tenantAppPath,
                     $childProcessCheck,
@@ -274,37 +249,14 @@ class TenantAppBootstrapService
         return [$tenant, $databaseConfig, $connectivityCheck, $childProcessCheck, $recoveryActions];
     }
 
-    private function buildProcessCommand(
-        object $databaseConfig,
-        array $payload,
-        string $phpBinary,
-        string $driver,
-        array $migrationSnapshot,
-    ): array
+    private function buildProcessCommand(string $phpBinary, string $bootstrapInputPath): array
     {
-        $processCommand = [
+        return [
             $phpBinary,
             'artisan',
             'tenant:bootstrap-database',
-            $databaseConfig->db_name,
-            (string) $payload['owner_name'],
-            (string) $payload['owner_email'],
-            (string) $payload['owner_password'],
-            '--driver='.$driver,
-            '--business='.(string) ($payload['business_name'] ?? 'Usaha Utama'),
-            '--branch='.(string) ($payload['branch_name'] ?? 'Cabang 1'),
-            '--owner-role='.(string) ($payload['owner_role'] ?? 'owner'),
-            '--migration-path='.(string) ($migrationSnapshot['path'] ?? ''),
+            '--bootstrap-input='.$bootstrapInputPath,
         ];
-
-        if ($driver === 'mysql') {
-            $processCommand[] = '--db-host='.(string) ($databaseConfig->db_host ?: config('platform.tenant_mysql_host', '127.0.0.1'));
-            $processCommand[] = '--db-port='.(string) ($databaseConfig->db_port ?: config('platform.tenant_mysql_port', '3306'));
-            $processCommand[] = '--db-username='.(string) ($databaseConfig->db_username ?: config('platform.tenant_mysql_runtime_username', 'root'));
-            $processCommand[] = '--db-password='.$this->resolveDatabasePassword($databaseConfig);
-        }
-
-        return $processCommand;
     }
 
     private function createTenantMigrationSnapshot(string $tenantAppPath, Tenant $tenant): array
@@ -341,6 +293,57 @@ class TenantAppBootstrapService
             'file_count' => count($copiedFiles),
             'files' => $copiedFiles,
         ];
+    }
+
+    private function createBootstrapInputFile(
+        object $databaseConfig,
+        array $payload,
+        string $driver,
+        array $migrationSnapshot,
+    ): string {
+        $directory = (string) config('platform.tenant_bootstrap_input_directory');
+
+        if ($directory === '') {
+            throw new RuntimeException('Direktori input bootstrap tenant belum dikonfigurasi.');
+        }
+
+        File::ensureDirectoryExists($directory, 0700, true);
+        @chmod($directory, 0700);
+
+        $path = rtrim($directory, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.bin2hex(random_bytes(24)).'.json';
+        $this->refreshBootstrapInputFile($path, $databaseConfig, $payload, $driver, $migrationSnapshot);
+
+        return $path;
+    }
+
+    private function refreshBootstrapInputFile(
+        string $path,
+        object $databaseConfig,
+        array $payload,
+        string $driver,
+        array $migrationSnapshot,
+    ): void {
+        $input = [
+            'version' => 1,
+            'database' => (string) $databaseConfig->db_name,
+            'owner_name' => (string) ($payload['owner_name'] ?? ''),
+            'owner_email' => (string) ($payload['owner_email'] ?? ''),
+            'owner_password' => (string) ($payload['owner_password'] ?? ''),
+            'driver' => $driver,
+            'db_host' => (string) ($databaseConfig->db_host ?: config('platform.tenant_mysql_host', '127.0.0.1')),
+            'db_port' => (string) ($databaseConfig->db_port ?: config('platform.tenant_mysql_port', '3306')),
+            'db_username' => (string) ($databaseConfig->db_username ?: config('platform.tenant_mysql_runtime_username', '')),
+            'db_password' => $driver === 'mysql' ? $this->resolveDatabasePassword($databaseConfig) : '',
+            'business_name' => (string) ($payload['business_name'] ?? 'Usaha Utama'),
+            'branch_name' => (string) ($payload['branch_name'] ?? 'Cabang 1'),
+            'owner_role' => (string) ($payload['owner_role'] ?? 'owner'),
+            'migration_path' => (string) ($migrationSnapshot['path'] ?? ''),
+        ];
+
+        $encodedInput = json_encode($input, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+
+        File::put($path, $encodedInput, true);
+        @chmod($path, 0600);
     }
 
     private function cleanupTenantMigrationSnapshot(array $migrationSnapshot): array
@@ -564,6 +567,7 @@ class TenantAppBootstrapService
         string $reason,
         string $phpBinary,
         string $tenantAppPath,
+        string $bootstrapInputPath,
     ): array {
         $tenant = $this->tenantProvisioningService->provision($tenant);
         $databaseConfig = $tenant->databaseConfigs->sortByDesc('id')->first();
@@ -574,7 +578,7 @@ class TenantAppBootstrapService
 
         $connectivityCheck = $this->assertTenantDatabaseReachable($databaseConfig, $driver);
         $childProcessCheck = $driver === 'mysql'
-            ? $this->probeTenantDatabaseViaChildProcess($databaseConfig, $phpBinary, $tenantAppPath)
+            ? $this->probeTenantDatabaseViaChildProcess($bootstrapInputPath, $phpBinary, $tenantAppPath)
             : null;
 
         return [
@@ -591,20 +595,22 @@ class TenantAppBootstrapService
         ];
     }
 
-    private function probeTenantDatabaseViaChildProcess(object $databaseConfig, string $phpBinary, string $tenantAppPath): array
+    private function probeTenantDatabaseViaChildProcess(string $bootstrapInputPath, string $phpBinary, string $tenantAppPath): array
     {
-        $host = (string) ($databaseConfig->db_host ?: config('platform.tenant_mysql_host', '127.0.0.1'));
-        $port = (string) ($databaseConfig->db_port ?: config('platform.tenant_mysql_port', '3306'));
-        $database = (string) $databaseConfig->db_name;
-        $username = (string) ($databaseConfig->db_username ?: config('platform.tenant_mysql_runtime_username', 'root'));
-        $password = $this->resolveDatabasePassword($databaseConfig);
-
         $probeScript = <<<'PHP'
-$host = $argv[1] ?? '127.0.0.1';
-$port = $argv[2] ?? '3306';
-$database = $argv[3] ?? '';
-$username = $argv[4] ?? 'root';
-$password = $argv[5] ?? '';
+$inputPath = $argv[1] ?? '';
+$input = is_file($inputPath) ? json_decode((string) file_get_contents($inputPath), true) : null;
+
+if (! is_array($input) || ($input['driver'] ?? null) !== 'mysql') {
+    fwrite(STDERR, 'Bootstrap input tidak valid.');
+    exit(1);
+}
+
+$host = (string) ($input['db_host'] ?? '127.0.0.1');
+$port = (string) ($input['db_port'] ?? '3306');
+$database = (string) ($input['database'] ?? '');
+$username = (string) ($input['db_username'] ?? '');
+$password = (string) ($input['db_password'] ?? '');
 
 try {
     $pdo = new PDO(
@@ -634,11 +640,7 @@ PHP;
                 $phpBinary,
                 '-r',
                 $probeScript,
-                $host,
-                $port,
-                $database,
-                $username,
-                $password,
+                $bootstrapInputPath,
             ], $tenantAppPath, [
                 'DB_CONNECTION' => false,
                 'DB_DATABASE' => false,
@@ -679,7 +681,7 @@ PHP;
         return [
             'status' => 'warning',
             'message' => 'Database tenant lolos preflight internal tetapi belum stabil untuk proses bootstrap lintas-app.',
-            'detail' => $lastErrorOutput ?: 'unknown child-process connection error',
+            'failure_category' => $lastErrorOutput !== null ? 'child_process_connection_failed' : 'unknown',
         ];
     }
 
@@ -919,7 +921,7 @@ PHP;
     }
 
     private function waitForStableChildProcessConnectivity(
-        object $databaseConfig,
+        string $bootstrapInputPath,
         string $phpBinary,
         string $tenantAppPath,
         array $initialResult,
@@ -929,7 +931,7 @@ PHP;
         for ($attempt = 1; $attempt <= 3; $attempt++) {
             usleep($attempt * 1500000);
 
-            $lastResult = $this->probeTenantDatabaseViaChildProcess($databaseConfig, $phpBinary, $tenantAppPath);
+            $lastResult = $this->probeTenantDatabaseViaChildProcess($bootstrapInputPath, $phpBinary, $tenantAppPath);
 
             if (($lastResult['status'] ?? null) === 'ok') {
                 $lastResult['stabilized_after_retry'] = true;
@@ -1059,9 +1061,24 @@ PHP;
             return 'Bootstrap tenant app bentrok dengan state database yang sudah terlanjur terbentuk sebagian. Sistem sudah mencoba retry otomatis, tetapi tenant app masih butuh recovery bootstrap lanjutan. Cek Provision Log untuk output teknis detail.';
         }
 
-        return $errorOutput !== ''
-            ? $errorOutput
-            : ($standardOutput !== '' ? $standardOutput : 'Bootstrap tenant app gagal tanpa pesan error eksplisit.');
+        return 'Bootstrap tenant app gagal dijalankan. Cek kategori kegagalan dan riwayat provisioning yang sudah disanitasi.';
+    }
+
+    private function bootstrapFailureCategory(Process $process): string
+    {
+        $output = strtolower(trim($process->getErrorOutput()."\n".$process->getOutput()));
+
+        return match (true) {
+            str_contains($output, 'sqlstate[hy000] [2002]'),
+            str_contains($output, 'connection refused'),
+            str_contains($output, 'unknown error while connecting') => 'tenant_database_connection_failed',
+            str_contains($output, 'base table or view already exists'),
+            str_contains($output, 'duplicate column name'),
+            str_contains($output, 'duplicate key name'),
+            str_contains($output, 'duplicate entry') => 'tenant_migration_conflict',
+            $process->isTimedOut() => 'tenant_bootstrap_timed_out',
+            default => 'tenant_bootstrap_command_failed',
+        };
     }
 
     private function resolveDatabasePassword(object $databaseConfig): string

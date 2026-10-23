@@ -12,6 +12,7 @@ class PlatformPaymentEvent extends Model
         'payment_provider',
         'event_key',
         'provider_reference',
+        'provider_event_key',
         'signature_valid',
         'payload_json',
         'process_status',

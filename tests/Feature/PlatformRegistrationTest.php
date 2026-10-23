@@ -171,6 +171,8 @@ class PlatformRegistrationTest extends TestCase
         $tenant = Tenant::query()->where('owner_email', 'platform-owner@example.com')->first();
 
         $this->assertNotNull($tenant);
+        app(\App\Services\Platform\TenantOnboardingWorker::class)->processNext($tenant->id);
+        $tenant->refresh();
         $this->assertSame('trial', $tenant->status);
         $this->assertSame($tenant->code.'.poslive.test', $tenant->domains()->where('is_primary', true)->value('domain'));
         $this->assertSame(1, $tenant->subscriptions()->count());
@@ -222,10 +224,9 @@ class PlatformRegistrationTest extends TestCase
         File::deleteDirectory($directory);
     }
 
-    public function test_paid_plan_registration_still_starts_with_trial_without_invoice(): void
+    public function test_paid_plan_registration_waits_for_payment_without_provisioning(): void
     {
         config()->set('platform.tenant_base_domain', 'poslive.test');
-        config()->set('platform.tenant_database_driver', 'sqlite');
         $directory = storage_path('framework/testing/platform-registration-paid-plan-trial');
         File::deleteDirectory($directory);
         config()->set('platform.tenant_database_directory', $directory);
@@ -253,18 +254,24 @@ class PlatformRegistrationTest extends TestCase
         $subscription = Subscription::query()->where('tenant_id', $tenant->id)->firstOrFail();
         $databaseConfig = TenantDatabaseConfig::query()->where('tenant_id', $tenant->id)->firstOrFail();
 
-        $verifyResponse->assertRedirect(route('platform.register.success', ['tenant' => $tenant->code]));
+        $registrationInvoice = \App\Models\Platform\PlatformPaymentTransaction::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('type', 'registration')
+            ->firstOrFail();
+        $verifyResponse->assertRedirectContains(route('platform.payment.show', ['invoiceNumber' => $registrationInvoice->invoice_number]));
 
-        $this->assertSame('trial', $tenant->status);
-        $this->assertNotNull($tenant->trial_ends_at);
-        $this->assertSame('trial', $subscription->status);
-        $this->assertNotNull($subscription->trial_ends_at);
-        $this->assertNotNull($subscription->expired_at);
+        $this->assertSame('pending_payment', $tenant->status);
+        $this->assertNull($tenant->trial_ends_at);
+        $this->assertSame('pending_payment', $subscription->status);
+        $this->assertNull($subscription->started_at);
+        $this->assertNull($subscription->trial_ends_at);
+        $this->assertNull($subscription->expired_at);
         $this->assertSame($plan->id, $subscription->plan_id);
-        $this->assertSame('provisioned', $databaseConfig->status);
-        $this->assertDatabaseMissing('platform_payment_transactions', [
+        $this->assertSame('pending', $databaseConfig->status);
+        $this->assertDatabaseHas('platform_payment_transactions', [
             'tenant_id' => $tenant->id,
             'type' => 'registration',
+            'status' => 'pending_payment',
         ]);
 
         $this->assertNotNull($pendingRegistration->fresh()->email_verified_at);
@@ -272,13 +279,13 @@ class PlatformRegistrationTest extends TestCase
         $this->assertSame($tenant->id, $pendingRegistration->fresh()->tenant_id);
 
         $this->get(route('platform.register.verify', ['token' => $pendingRegistration->verification_token]))
-            ->assertRedirect(route('platform.register.success', ['tenant' => $tenant->code]));
+            ->assertRedirectContains(route('platform.payment.show', ['invoiceNumber' => $registrationInvoice->invoice_number]));
 
-        $databasePath = $databaseConfig->db_name;
-        $this->assertNotFalse($databasePath);
-        $this->assertTrue(File::exists($databasePath));
-
-        $this->assertDatabaseHas('tenant_provision_logs', [
+        $this->assertDatabaseMissing('tenant_provision_logs', [
+            'tenant_id' => $tenant->id,
+            'step' => 'database_provisioning',
+        ]);
+        $this->assertDatabaseMissing('tenant_provision_logs', [
             'tenant_id' => $tenant->id,
             'step' => 'auto_onboarding_completed',
             'status' => 'completed',
@@ -291,10 +298,7 @@ class PlatformRegistrationTest extends TestCase
             return $mail->hasTo('paid-registration@example.com')
                 && $mail->tenantCode === $tenant->code;
         });
-        Mail::assertSent(PlatformTenantReady::class, function (PlatformTenantReady $mail) use ($tenant) {
-            return $mail->hasTo('paid-registration@example.com')
-                && $mail->tenantCode === $tenant->code;
-        });
+        Mail::assertNotSent(PlatformTenantReady::class);
 
         File::deleteDirectory($directory);
     }
@@ -529,6 +533,32 @@ class PlatformRegistrationTest extends TestCase
                 'logs' => [],
                 'message' => 'Tenant untuk status pendaftaran ini sudah tidak ditemukan. Silakan ulangi pendaftaran dari awal.',
             ]);
+    }
+
+    public function test_public_onboarding_pages_require_the_opaque_access_token(): void
+    {
+        $tenant = Tenant::query()->create([
+            'code' => 'protected-onboarding',
+            'name' => 'Protected Onboarding',
+            'owner_name' => 'Protected Owner',
+            'owner_email' => 'protected-onboarding@example.com',
+            'status' => 'pending_setup',
+        ]);
+        $dispatcher = app(\App\Services\Platform\TenantOnboardingDispatcher::class);
+        $dispatcher->enqueue($tenant, [
+            'owner_name' => $tenant->owner_name,
+            'owner_email' => $tenant->owner_email,
+        ]);
+        $accessToken = $dispatcher->issuePublicAccessToken($tenant);
+
+        $this->get(route('platform.register.success', ['tenant' => $tenant->code]))->assertNotFound();
+        $this->getJson(route('platform.register.status', ['tenant' => $tenant->code]))->assertNotFound();
+        $this->postJson(route('platform.register.bootstrap', ['tenant' => $tenant->code]))->assertNotFound();
+
+        $this->get(route('platform.register.success', ['tenant' => $tenant->code, 'access' => $accessToken]))
+            ->assertOk();
+        $this->getJson(route('platform.register.status', ['tenant' => $tenant->code, 'access' => $accessToken]))
+            ->assertOk();
     }
 
     public function test_it_reuses_the_same_verification_token_for_an_existing_pending_registration(): void

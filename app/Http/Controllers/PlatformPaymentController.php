@@ -16,18 +16,34 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class PlatformPaymentController extends Controller
 {
-    public function show(string $invoiceNumber, PlatformSettings $platformSettings): View
+    public function show(
+        string $invoiceNumber,
+        PlatformSettings $platformSettings,
+        \App\Services\Platform\TenantOnboardingDispatcher $onboardingDispatcher,
+        Request $request,
+    ): View
     {
         $transaction = $this->resolveTransaction($invoiceNumber);
+        $registrationStatusUrl = null;
+
+        if ($transaction->type === 'registration' && $transaction->tenant !== null) {
+            $accessToken = $request->query('access');
+
+            if (is_string($accessToken) && $onboardingDispatcher->hasValidPublicAccess($transaction->tenant, $accessToken)) {
+                $registrationStatusUrl = $onboardingDispatcher->accessUrl($transaction->tenant, $accessToken);
+            }
+        }
 
         return view('platform.payment-manual', [
             'transaction' => $transaction,
             'dokuEnabled' => app(DokuCheckoutService::class)->isEnabled(),
             'paymentDestination' => $platformSettings->paymentDestination(),
+            'registrationStatusUrl' => $registrationStatusUrl,
         ]);
     }
 
@@ -218,26 +234,83 @@ class PlatformPaymentController extends Controller
             requestTarget: $dokuCheckoutService->requestTargetForNotification($request->getPathInfo()),
         );
 
-        $mappedStatus = $dokuCheckoutService->mapDokuStatus($payload);
+        // Never allow an unauthenticated notification to mutate a payment or
+        // subscription. We still retain a minimal audit event so an operator
+        // can investigate invalid delivery attempts without exposing a
+        // successful processing path to the caller.
+        if (! $signatureValid) {
+            $event = PlatformPaymentEvent::query()->create([
+                'payment_transaction_id' => $transaction->getKey(),
+                'payment_provider' => 'doku',
+                'event_key' => (string) Arr::get($payload, 'transaction.status', Arr::get($payload, 'order.status', 'notification')),
+                'provider_reference' => (string) Arr::get($payload, 'transaction.original_request_id', ''),
+                'signature_valid' => false,
+                'payload_json' => $payload,
+                'process_status' => 'rejected',
+                'received_at' => now(),
+                'processed_at' => now(),
+                'failure_reason' => 'DOKU webhook signature is invalid.',
+            ]);
+            $event->forceFill([
+                'process_status' => 'rejected',
+                'processed_at' => now(),
+                'failure_reason' => 'DOKU webhook signature is invalid.',
+            ])->save();
 
-        $event = PlatformPaymentEvent::query()->create([
+            Log::warning('Rejected DOKU webhook with an invalid signature.', [
+                'invoice_number' => $invoiceNumber,
+                'payment_transaction_id' => $transaction->getKey(),
+            ]);
+
+            return response()->json([
+                'status' => 'rejected',
+                'message' => 'Webhook signature tidak valid.',
+            ], 401);
+        }
+
+        $mappedStatus = $dokuCheckoutService->mapDokuStatus($payload);
+        $providerReference = (string) Arr::get($payload, 'transaction.original_request_id', '');
+        $providerEventKey = $providerReference !== ''
+            ? $providerReference.':'.$mappedStatus
+            : hash('sha256', (string) $request->getContent());
+
+        $event = PlatformPaymentEvent::query()->firstOrCreate([
+            'payment_provider' => 'doku',
+            'provider_event_key' => Str::limit($providerEventKey, 128, ''),
+        ], [
             'payment_transaction_id' => $transaction->getKey(),
             'payment_provider' => 'doku',
             'event_key' => (string) Arr::get($payload, 'transaction.status', Arr::get($payload, 'order.status', 'notification')),
-            'provider_reference' => (string) Arr::get($payload, 'transaction.original_request_id', ''),
-            'signature_valid' => $signatureValid,
+            'provider_reference' => $providerReference,
+            'signature_valid' => true,
             'payload_json' => $payload,
             'process_status' => 'received',
             'received_at' => now(),
         ]);
 
+        if (! $event->wasRecentlyCreated) {
+            return response()->json([
+                'status' => 'ignored',
+                'message' => 'Webhook DOKU sudah pernah diterima.',
+            ]);
+        }
+
         try {
+            if (
+                $transaction->payment_provider !== 'doku'
+                || $transaction->provider_reference === null
+                || $providerReference === ''
+                || ! hash_equals($transaction->provider_reference, $providerReference)
+            ) {
+                throw new \InvalidArgumentException('Referensi pembayaran gateway tidak cocok dengan invoice lokal.');
+            }
+
             if ($mappedStatus === 'paid') {
                 $paymentActivationService->markAsPaid($transaction, now(), [
                     'approved_via' => 'doku_webhook',
                     'signature_valid' => $signatureValid,
                 ]);
-            } else {
+            } elseif ($transaction->status !== 'paid') {
                 $transaction->forceFill([
                     'payment_method' => 'gateway',
                     'payment_provider' => 'doku',
@@ -249,6 +322,17 @@ class PlatformPaymentController extends Controller
                         'doku_last_payload' => $payload,
                     ], fn ($value) => $value !== null && $value !== ''),
                 ])->save();
+            } else {
+                $event->forceFill([
+                    'process_status' => 'ignored',
+                    'processed_at' => now(),
+                    'failure_reason' => 'Notifikasi gateway terlambat diabaikan karena invoice sudah paid.',
+                ])->save();
+
+                return response()->json([
+                    'status' => 'ignored',
+                    'invoice_number' => $invoiceNumber,
+                ]);
             }
 
             $event->forceFill([

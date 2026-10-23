@@ -7,6 +7,7 @@ use App\Models\Platform\Plan;
 use App\Models\Platform\PlatformPaymentTransaction;
 use App\Models\Platform\Subscription;
 use App\Models\Platform\Tenant;
+use App\Models\Platform\TenantBootstrapSecret;
 use App\Models\Platform\TenantDatabaseConfig;
 use App\Models\Platform\TenantDomain;
 use App\Models\Platform\TenantProvisionLog;
@@ -27,6 +28,7 @@ class TenantRegistrationService
         private readonly TenantDomainSuggestionService $tenantDomainSuggestionService,
         private readonly TenantProvisioningService $tenantProvisioningService,
         private readonly TenantAppBootstrapService $tenantAppBootstrapService,
+        private readonly TenantOnboardingDispatcher $onboardingDispatcher,
         private readonly PlatformSettings $platformSettings,
         private readonly AccountingDefaultChartService $accountingDefaultChartService,
     ) {
@@ -103,12 +105,25 @@ class TenantRegistrationService
                 'payload' => [
                     'owner_email' => $ownerEmail,
                     'owner_name' => trim((string) $payload['owner_name']),
-                    'owner_password_encrypted' => Crypt::encryptString($ownerPassword),
                     'owner_email_verified_at' => $payload['owner_email_verified_at'] ?? null,
                     'business_name' => $businessName,
                     'branch_name' => $branchName,
                     'owner_role' => 'owner',
                 ],
+            ]);
+
+            TenantBootstrapSecret::query()->create([
+                'tenant_id' => $tenant->getKey(),
+                'owner_password_encrypted' => Crypt::encryptString($ownerPassword),
+            ]);
+
+            $this->onboardingDispatcher->enqueue($tenant, [
+                'owner_name' => trim((string) $payload['owner_name']),
+                'owner_email' => $ownerEmail,
+                'owner_email_verified_at' => $payload['owner_email_verified_at'] ?? null,
+                'business_name' => $businessName,
+                'branch_name' => $branchName,
+                'owner_role' => 'owner',
             ]);
 
             $this->accountingDefaultChartService->provisionForTenant($tenant);
@@ -202,13 +217,26 @@ class TenantRegistrationService
                 'payload' => [
                     'owner_email' => $ownerEmail,
                     'owner_name' => trim((string) $payload['owner_name']),
-                    'owner_password_encrypted' => Crypt::encryptString($ownerPassword),
                     'owner_email_verified_at' => $payload['owner_email_verified_at'] ?? null,
                     'business_name' => $businessName,
                     'branch_name' => $branchName,
                     'owner_role' => 'owner',
                 ],
             ]);
+
+            TenantBootstrapSecret::query()->create([
+                'tenant_id' => $tenant->getKey(),
+                'owner_password_encrypted' => Crypt::encryptString($ownerPassword),
+            ]);
+
+            $this->onboardingDispatcher->enqueue($tenant, [
+                'owner_name' => trim((string) $payload['owner_name']),
+                'owner_email' => $ownerEmail,
+                'owner_email_verified_at' => $payload['owner_email_verified_at'] ?? null,
+                'business_name' => $businessName,
+                'branch_name' => $branchName,
+                'owner_role' => 'owner',
+            ], false);
 
             $this->accountingDefaultChartService->provisionForTenant($tenant);
 
@@ -263,6 +291,7 @@ class TenantRegistrationService
         ]);
 
         $this->sendTenantReadyEmailIfNeeded($tenant, $payload);
+        TenantBootstrapSecret::query()->where('tenant_id', $tenant->getKey())->delete();
 
         return $tenant->fresh(['subscriptions.plan', 'domains', 'databaseConfigs', 'provisionLogs']);
     }
@@ -310,21 +339,15 @@ class TenantRegistrationService
             return false;
         }
 
-        [, $latestBootstrapLog] = $this->resolveStoredAutoOnboardingContext($tenant);
-        $bootstrapIsPending = $latestBootstrapLog?->status === 'pending';
-        $bootstrapIsFresh = $bootstrapIsPending
-            && $latestBootstrapLog?->updated_at !== null
-            && $latestBootstrapLog->updated_at->gte(now()->subMinute());
+        [$payload] = $this->resolveStoredAutoOnboardingContext($tenant);
 
-        if ($bootstrapIsFresh) {
+        if ($payload === null) {
             return false;
         }
 
-        if (app()->runningUnitTests()) {
-            return $this->completeAutoOnboardingViaCli($tenant);
-        }
+        $this->onboardingDispatcher->enqueue($tenant, $payload, $tenant->status !== 'pending_payment');
 
-        return $this->dispatchAutoOnboardingCli($tenant);
+        return true;
     }
 
     public function resumeStoredAutoOnboarding(Tenant $tenant): Tenant
@@ -399,7 +422,9 @@ class TenantRegistrationService
             ->latest('id')
             ->value('payload') ?? []);
 
-        $ownerPasswordEncrypted = (string) ($requestedPayload['owner_password_encrypted'] ?? '');
+        $ownerPasswordEncrypted = (string) (TenantBootstrapSecret::query()
+            ->where('tenant_id', $tenant->getKey())
+            ->value('owner_password_encrypted') ?? '');
 
         if ($ownerPasswordEncrypted === '') {
             return false;
@@ -649,7 +674,9 @@ class TenantRegistrationService
             ->latest('id')
             ->value('payload') ?? []);
 
-        $ownerPasswordEncrypted = (string) ($requestedPayload['owner_password_encrypted'] ?? '');
+        $ownerPasswordEncrypted = (string) (TenantBootstrapSecret::query()
+            ->where('tenant_id', $tenant->getKey())
+            ->value('owner_password_encrypted') ?? '');
 
         if ($ownerPasswordEncrypted === '') {
             return [null, null];

@@ -1,6 +1,7 @@
 <!doctype html>
 <html class="no-js" lang="id">
 <head>
+    <meta name="referrer" content="no-referrer">
     <meta charset="utf-8">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <title>POS|Platform Registration Success</title>
@@ -718,12 +719,14 @@
                             id="bootstrap-status"
                             class="status-badge {{ $bootstrapStatus === 'completed' ? 'complete' : ($bootstrapStatus === 'failed' ? 'failed' : '') }}"
                         >
-                            {{ $bootstrapStatus === 'completed' ? 'Tenant siap digunakan' : ($bootstrapStatus === 'failed' ? 'Provisioning butuh pengecekan' : 'Sedang menyiapkan tenant...') }}
+                            {{ $bootstrapStatus === 'completed' ? 'Tenant siap digunakan' : ($bootstrapStatus === 'failed' ? 'Provisioning butuh pengecekan' : ($bootstrapStatus === 'blocked' ? 'Menunggu pembayaran' : 'Sedang menyiapkan tenant...')) }}
                         </div>
                         <ol id="bootstrap-log" class="status-log">
                             <li>Pendaftaran diterima.</li>
-                            @if ($bootstrapStatus === 'processing')
+                            @if (in_array($bootstrapStatus, ['processing', 'retry_wait'], true))
                                 <li>Provisioning tenant sedang dijalankan otomatis.</li>
+                            @elseif ($bootstrapStatus === 'blocked')
+                                <li>Setup tenant akan dimulai setelah pembayaran tervalidasi.</li>
                             @elseif ($bootstrapStatus === 'failed')
                                 <li>Provisioning tenant terakhir gagal dan perlu pengecekan.</li>
                             @else
@@ -776,7 +779,7 @@
                     <div class="success-links">
                         <a href="{{ url('/') }}" class="success-cta">Kembali ke landing</a>
                         @if ($tenantLoginUrl)
-                            <a href="{{ $tenantLoginUrl }}" class="success-cta">Buka Login Tenant</a>
+                            <a href="{{ $tenantLoginUrl }}" class="success-cta" rel="noreferrer">Buka Login Tenant</a>
                         @endif
                     </div>
                 </section>
@@ -824,6 +827,8 @@
 
             const labels = {
                 processing: 'Sedang menyiapkan tenant...',
+                retry_wait: 'Menunggu percobaan ulang otomatis...',
+                blocked: 'Menunggu pembayaran',
                 completed: 'Tenant siap digunakan',
                 failed: 'Provisioning butuh pengecekan',
             };
@@ -931,7 +936,7 @@
                 }
 
                 retryButton.classList.toggle('visible', status === 'failed');
-                processingMarquee?.classList.toggle('hidden', status !== 'processing');
+                processingMarquee?.classList.toggle('hidden', !['processing', 'retry_wait'].includes(status));
                 persistProgress(status);
                 renderProgress(status, latestLogs);
                 updateStuckHint(status);
@@ -980,12 +985,12 @@
             function updateStuckHint(status) {
                 clearStuckHint();
 
-                if (status !== 'processing') {
+                if (!['processing', 'retry_wait'].includes(status)) {
                     return;
                 }
 
                 stuckNoteHandle = window.setTimeout(() => {
-                    if (currentStatus === 'processing') {
+                    if (['processing', 'retry_wait'].includes(currentStatus)) {
                         stuckNote?.classList.add('visible');
                     }
                 }, 20000);
@@ -1102,7 +1107,7 @@
 
                     await fetchStatus();
 
-                    if (currentStatus === 'processing') {
+                    if (['processing', 'retry_wait'].includes(currentStatus)) {
                         startPolling();
                     }
                 } catch (error) {
@@ -1121,7 +1126,7 @@
             renderLogs(latestLogs);
             renderProgress(currentStatus, latestLogs);
 
-            if (currentStatus === 'processing') {
+            if (['processing', 'retry_wait'].includes(currentStatus)) {
                 persistProgress(currentStatus);
                 startPolling();
 

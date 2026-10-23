@@ -4,6 +4,7 @@ namespace App\Models\Platform;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -39,6 +40,16 @@ class Tenant extends Model
     public function databaseConfigs(): HasMany
     {
         return $this->hasMany(TenantDatabaseConfig::class);
+    }
+
+    public function bootstrapSecret(): HasOne
+    {
+        return $this->hasOne(TenantBootstrapSecret::class);
+    }
+
+    public function onboardingJob(): HasOne
+    {
+        return $this->hasOne(TenantOnboardingJob::class);
     }
 
     public function provisionLogs(): HasMany

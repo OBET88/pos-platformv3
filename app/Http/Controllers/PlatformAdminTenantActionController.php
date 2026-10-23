@@ -11,6 +11,7 @@ use App\Services\Platform\TenantAuditLogger;
 use App\Services\Platform\TenantAppBootstrapService;
 use App\Services\Platform\TenantProvisioningService;
 use App\Services\Platform\TenantStatusGuard;
+use App\Services\Platform\TenantOnboardingDispatcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -93,6 +94,7 @@ class PlatformAdminTenantActionController extends Controller
         Tenant $tenant,
         TenantProvisioningService $provisioningService,
         TenantAppBootstrapService $bootstrapService,
+        TenantOnboardingDispatcher $onboardingDispatcher,
         TenantAuditLogger $auditLogger
     ): RedirectResponse
     {
@@ -123,6 +125,13 @@ class PlatformAdminTenantActionController extends Controller
                     'owner_name' => $validated['owner_user_name'],
                     'owner_email' => $validated['owner_user_email'],
                     'owner_password' => $validated['owner_user_password'],
+                    'business_name' => $validated['business_name'],
+                    'branch_name' => $validated['branch_name'],
+                    'owner_role' => $validated['owner_role'],
+                ]);
+                $onboardingDispatcher->finalizeAdminRecovery($tenant, [
+                    'owner_name' => $validated['owner_user_name'],
+                    'owner_email' => $validated['owner_user_email'],
                     'business_name' => $validated['business_name'],
                     'branch_name' => $validated['branch_name'],
                     'owner_role' => $validated['owner_role'],

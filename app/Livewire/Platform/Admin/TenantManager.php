@@ -353,7 +353,7 @@ class TenantManager extends Component
         session()->flash('platform_admin_message', 'Recovery provisioning tenant selesai. Database tenant sudah diverifikasi ulang.');
     }
 
-    public function bootstrapTenantApp(TenantAppBootstrapService $bootstrapService, TenantAuditLogger $auditLogger): void
+    public function bootstrapTenantApp(TenantAppBootstrapService $bootstrapService, \App\Services\Platform\TenantOnboardingDispatcher $onboardingDispatcher, TenantAuditLogger $auditLogger): void
     {
         $tenant = $this->selectedTenant();
 
@@ -375,6 +375,13 @@ class TenantManager extends Component
                 'owner_name' => $validated['ownerUserName'],
                 'owner_email' => $validated['ownerUserEmail'],
                 'owner_password' => $validated['ownerUserPassword'],
+                'business_name' => $validated['businessName'],
+                'branch_name' => $validated['branchName'],
+                'owner_role' => $validated['ownerRole'],
+            ]);
+            $onboardingDispatcher->finalizeAdminRecovery($tenant, [
+                'owner_name' => $validated['ownerUserName'],
+                'owner_email' => $validated['ownerUserEmail'],
                 'business_name' => $validated['businessName'],
                 'branch_name' => $validated['branchName'],
                 'owner_role' => $validated['ownerRole'],

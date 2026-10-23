@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\Mail\PlatformRegistrationReceived;
 use App\Mail\PlatformRegistrationVerification;
 use App\Models\Platform\PendingRegistration;
+use App\Models\Platform\Plan;
 use App\Models\Platform\RegistrationDraft;
 use App\Models\Platform\Tenant;
 use App\Services\Platform\PendingRegistrationService;
 use App\Services\Platform\PlatformInboxPublisher;
 use App\Services\Platform\PlatformSettings;
 use App\Services\Platform\TenantRegistrationService;
+use App\Services\Platform\TenantOnboardingDispatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -301,7 +303,8 @@ class PlatformRegistrationController extends Controller
         Request $request,
         string $token,
         TenantRegistrationService $registrationService,
-        PlatformInboxPublisher $inboxPublisher
+        PlatformInboxPublisher $inboxPublisher,
+        TenantOnboardingDispatcher $onboardingDispatcher,
     ): RedirectResponse {
         $this->prepareRegistrationRequest();
 
@@ -328,14 +331,21 @@ class PlatformRegistrationController extends Controller
         if ($pendingRegistration->tenant_id) {
             $tenant = Tenant::query()->findOrFail($pendingRegistration->tenant_id);
 
+            $invoice = \App\Models\Platform\PlatformPaymentTransaction::query()
+                ->where('tenant_id', $tenant->getKey())
+                ->where('type', 'registration')
+                ->whereNotIn('status', ['paid', 'cancelled', 'refunded'])
+                ->latest('id')
+                ->first();
+
+            if ($invoice !== null) {
+                return redirect()
+                    ->route('platform.payment.show', ['invoiceNumber' => $invoice->invoice_number]);
+            }
+
             return redirect()
-                ->route('platform.register.success', ['tenant' => $tenant->code])
-                ->with('registration_success', true)
-                ->with('tenant_bootstrap_dispatched', true)
-                ->with('tenant_login_url', $tenant->domains->firstWhere('is_primary', true)?->domain
-                    ? 'http://'.$tenant->domains->firstWhere('is_primary', true)?->domain.'/login'
-                    : null)
-                ->with('registration_email_sent', true);
+                ->route('platform.register.pending')
+                ->with('status', 'Email ini sudah diverifikasi sebelumnya. Gunakan tautan status pada email konfirmasi untuk memantau onboarding tenant.');
         }
 
         if ($pendingRegistration->expires_at?->isPast()) {
@@ -357,24 +367,20 @@ class PlatformRegistrationController extends Controller
                 ->delete();
         }
 
-        $runSynchronously = app()->runningUnitTests();
-        $completeOnboardingDuringVerify = $runSynchronously;
-        $tenant = $registrationService->register($validated, $completeOnboardingDuringVerify);
-        $bootstrapDispatched = $runSynchronously;
+        $selectedPlan = Plan::query()
+            ->where('code', (string) $validated['plan_code'])
+            ->where('is_active', true)
+            ->firstOrFail();
+        $requiresRegistrationPayment = (float) $selectedPlan->price > 0;
+        $runSynchronously = false;
 
-        if (! $runSynchronously && ! app()->environment('local')) {
-            try {
-                $bootstrapDispatched = $registrationService->startAutoOnboarding($tenant);
-            } catch (Throwable $exception) {
-                $bootstrapDispatched = false;
-
-                Log::warning('Platform registration auto onboarding dispatch failed after verification.', [
-                    'tenant_id' => $tenant->getKey(),
-                    'tenant_code' => $tenant->code,
-                    'owner_email' => $tenant->owner_email,
-                    'error' => $exception->getMessage(),
-                ]);
-            }
+        if ($requiresRegistrationPayment) {
+            $registrationInvoice = $registrationService->registerWithPendingPayment($validated);
+            $tenant = $registrationInvoice->tenant()->with('domains')->firstOrFail();
+            $bootstrapDispatched = false;
+        } else {
+            $tenant = $registrationService->register($validated, $runSynchronously);
+            $bootstrapDispatched = $runSynchronously;
         }
 
         $pendingRegistration->forceFill([
@@ -382,6 +388,8 @@ class PlatformRegistrationController extends Controller
             'consumed_at' => now(),
             'tenant_id' => $tenant->getKey(),
         ])->save();
+
+        $accessToken = $onboardingDispatcher->issuePublicAccessToken($tenant);
 
         $inboxPublisher->publish(
             tenant: $tenant,
@@ -401,7 +409,7 @@ class PlatformRegistrationController extends Controller
         $tenantLoginUrl = $tenant->domains->firstWhere('is_primary', true)?->domain
             ? 'http://'.$tenant->domains->firstWhere('is_primary', true)?->domain.'/login'
             : null;
-        $statusUrl = route('platform.register.success', ['tenant' => $tenant->code]);
+        $statusUrl = $onboardingDispatcher->accessUrl($tenant, $accessToken);
         $registrationEmailSent = false;
 
         if ($this->shouldSendPlatformMailNow()) {
@@ -428,8 +436,11 @@ class PlatformRegistrationController extends Controller
             ]);
         }
 
-        return redirect()
-            ->route('platform.register.success', ['tenant' => $tenant->code])
+        $redirect = $requiresRegistrationPayment
+            ? redirect()->route('platform.payment.show', ['invoiceNumber' => $registrationInvoice->invoice_number, 'access' => $accessToken])
+            : redirect()->route('platform.register.success', ['tenant' => $tenant->code, 'access' => $accessToken]);
+
+        return $redirect
             ->with('registration_success', true)
             ->with('tenant_bootstrap_dispatched', $bootstrapDispatched)
             ->with('tenant_login_url', $tenantLoginUrl)
@@ -496,9 +507,9 @@ class PlatformRegistrationController extends Controller
         ]);
     }
 
-    public function success(Request $request, string $tenant): View|RedirectResponse
+    public function success(Request $request, string $tenant, TenantOnboardingDispatcher $onboardingDispatcher): View|RedirectResponse
     {
-        $tenantModel = Tenant::query()->where('code', $tenant)->first();
+        $tenantModel = Tenant::query()->with('onboardingJob')->where('code', $tenant)->first();
 
         if (! $tenantModel) {
             return redirect()
@@ -508,14 +519,18 @@ class PlatformRegistrationController extends Controller
                 ]);
         }
 
+        if (! $onboardingDispatcher->hasValidPublicAccess($tenantModel, $request->query('access'))) {
+            abort(404);
+        }
+
         $initialLogs = $this->resolveProvisionLogs($tenantModel);
         $bootstrapStatus = $this->resolveBootstrapStatus($tenantModel);
 
         return view('platform.register-success', [
             'tenantCode' => $tenant,
             'bootstrapStatus' => $bootstrapStatus,
-            'bootstrapUrl' => route('platform.register.bootstrap', ['tenant' => $tenant]),
-            'statusUrl' => route('platform.register.status', ['tenant' => $tenant]),
+            'bootstrapUrl' => route('platform.register.bootstrap', ['tenant' => $tenant, 'access' => $request->query('access')]),
+            'statusUrl' => route('platform.register.status', ['tenant' => $tenant, 'access' => $request->query('access')]),
             'bootstrapDispatched' => app()->environment('local')
                 ? false
                 : (bool) session('tenant_bootstrap_dispatched', false),
@@ -526,9 +541,22 @@ class PlatformRegistrationController extends Controller
         ]);
     }
 
-    public function bootstrap(Request $request, string $tenant, TenantRegistrationService $registrationService): JsonResponse
+    public function bootstrap(Request $request, string $tenant, TenantRegistrationService $registrationService, TenantOnboardingDispatcher $onboardingDispatcher): JsonResponse
     {
-        $throttleKey = 'registration-bootstrap:'.$request->ip();
+        $tenantModel = Tenant::query()->where('code', $tenant)->first();
+
+        if (! $tenantModel) {
+            return response()->json([
+                'status' => 'missing',
+                'message' => 'Tenant untuk status pendaftaran ini sudah tidak ditemukan. Silakan ulangi pendaftaran dari awal.',
+            ], 404);
+        }
+
+        if (! $onboardingDispatcher->hasValidPublicAccess($tenantModel, $request->input('access'))) {
+            return response()->json(['status' => 'missing'], 404);
+        }
+
+        $throttleKey = 'registration-bootstrap:'.$tenantModel->getKey().':'.$request->ip();
 
         if (RateLimiter::tooManyAttempts($throttleKey, 10)) {
             return response()->json([
@@ -539,15 +567,6 @@ class PlatformRegistrationController extends Controller
 
         RateLimiter::hit($throttleKey, 300);
 
-        $tenantModel = Tenant::query()->where('code', $tenant)->first();
-
-        if (! $tenantModel) {
-            return response()->json([
-                'status' => 'missing',
-                'message' => 'Tenant untuk status pendaftaran ini sudah tidak ditemukan. Silakan ulangi pendaftaran dari awal.',
-            ], 404);
-        }
-
         if ($tenantModel->provisionLogs()->where('step', 'auto_onboarding_completed')->where('status', 'completed')->exists()) {
             return response()->json([
                 'status' => 'completed',
@@ -555,8 +574,11 @@ class PlatformRegistrationController extends Controller
         }
 
         try {
-            $tenantModel = $registrationService->resumeStoredAutoOnboarding($tenantModel);
+            if ($onboardingDispatcher->retry($tenantModel)) {
+                return response()->json(['status' => 'processing'], 202);
+            }
 
+            $registrationService->startAutoOnboarding($tenantModel);
             $completed = $tenantModel->provisionLogs()
                 ->where('step', 'auto_onboarding_completed')
                 ->where('status', 'completed')
@@ -580,9 +602,9 @@ class PlatformRegistrationController extends Controller
         }
     }
 
-    public function status(string $tenant): JsonResponse
+    public function status(Request $request, string $tenant, TenantOnboardingDispatcher $onboardingDispatcher): JsonResponse
     {
-        $tenantModel = Tenant::query()->where('code', $tenant)->first();
+        $tenantModel = Tenant::query()->with('onboardingJob')->where('code', $tenant)->first();
 
         if (! $tenantModel) {
             return response()->json([
@@ -592,13 +614,8 @@ class PlatformRegistrationController extends Controller
             ], 404);
         }
 
-        if ($this->shouldAttemptAutoOnboardingRefresh($tenantModel)) {
-            try {
-                $tenantModel = app(TenantRegistrationService::class)
-                    ->refreshAutoOnboardingProgress($tenantModel);
-            } catch (Throwable) {
-                $tenantModel = $tenantModel->fresh() ?? $tenantModel;
-            }
+        if (! $onboardingDispatcher->hasValidPublicAccess($tenantModel, $request->query('access'))) {
+            return response()->json(['status' => 'missing', 'logs' => []], 404);
         }
 
         return response()->json([
@@ -620,6 +637,12 @@ class PlatformRegistrationController extends Controller
 
     private function resolveBootstrapStatus(Tenant $tenant): string
     {
+        $jobStatus = $tenant->onboardingJob?->status;
+
+        if (in_array($jobStatus, ['failed', 'blocked', 'retry_wait'], true)) {
+            return $jobStatus;
+        }
+
         if ($tenant->provisionLogs()
             ->where('step', 'auto_onboarding_completed')
             ->where('status', 'completed')

@@ -16,6 +16,7 @@ class PaymentActivationService
         private readonly TenantAuditLogger $auditLogger,
         private readonly PlatformInboxPublisher $inboxPublisher,
         private readonly TenantRegistrationService $tenantRegistrationService,
+        private readonly TenantOnboardingDispatcher $onboardingDispatcher,
     ) {}
 
     public function markAsPaid(
@@ -25,8 +26,9 @@ class PaymentActivationService
         bool $activateSubscription = true
     ): PlatformPaymentTransaction {
         $paidAt ??= now();
+        $wasAlreadyPaid = false;
 
-        $paidTransaction = DB::transaction(function () use ($transaction, $paidAt, $meta, $activateSubscription): PlatformPaymentTransaction {
+        $paidTransaction = DB::transaction(function () use ($transaction, $paidAt, $meta, $activateSubscription, &$wasAlreadyPaid): PlatformPaymentTransaction {
             /** @var PlatformPaymentTransaction $transaction */
             $transaction = PlatformPaymentTransaction::query()
                 ->with(['tenant.subscriptions.plan', 'subscription.plan', 'plan'])
@@ -35,6 +37,12 @@ class PaymentActivationService
 
             if (in_array($transaction->status, ['cancelled', 'refunded'], true)) {
                 throw new InvalidArgumentException('Transaksi pembayaran yang sudah dibatalkan atau direfund tidak bisa diaktifkan.');
+            }
+
+            if ($transaction->isPaid()) {
+                $wasAlreadyPaid = true;
+
+                return $transaction;
             }
 
             $before = [
@@ -100,7 +108,7 @@ class PaymentActivationService
             return $transaction->fresh(['tenant', 'plan', 'subscription', 'proofs', 'events']);
         });
 
-        if ($activateSubscription && $paidTransaction->type === 'registration') {
+        if (! $wasAlreadyPaid && $activateSubscription && $paidTransaction->type === 'registration') {
             $this->resumeRegistrationOnboarding($paidTransaction, $paidAt);
         }
 
@@ -217,10 +225,14 @@ class PaymentActivationService
         }
 
         try {
-            if (app()->runningUnitTests() || app()->environment('local')) {
-                $this->tenantRegistrationService->completeStoredAutoOnboarding($tenant);
-            } else {
+            $released = $this->onboardingDispatcher->releaseAfterPayment($tenant);
+
+            if (! $released) {
                 $this->tenantRegistrationService->startAutoOnboarding($tenant);
+
+                if (! $this->onboardingDispatcher->releaseAfterPayment($tenant)) {
+                    throw new \RuntimeException('Job onboarding tenant tidak tersedia untuk dirilis setelah pembayaran.');
+                }
             }
 
             $this->inboxPublisher->publish(
@@ -253,6 +265,8 @@ class PaymentActivationService
                     'payment_transaction_id' => $transaction->getKey(),
                 ]
             );
+
+            throw $exception;
         }
     }
 }

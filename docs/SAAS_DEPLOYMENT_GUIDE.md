@@ -59,6 +59,7 @@ PLATFORM_TENANT_DB_ADMIN_PASSWORD=
 PLATFORM_TENANT_DB_RUNTIME_USERNAME=root
 PLATFORM_TENANT_DB_RUNTIME_PASSWORD=
 PLATFORM_TENANT_APP_PATH=../poslive
+PLATFORM_TENANT_BOOTSTRAP_INPUT_DIRECTORY=/home/ACCOUNT/.tenant-bootstrap-input
 ```
 
 #### 3.2 `poslive/.env`
@@ -85,6 +86,7 @@ PLATFORM_DB_USERNAME=root
 PLATFORM_DB_PASSWORD=
 
 TENANCY_CENTRAL_HOSTS=127.0.0.1,localhost,poslive.test
+TENANT_BOOTSTRAP_INPUT_DIRECTORY=/home/ACCOUNT/.tenant-bootstrap-input
 ```
 
 Catatan:
@@ -197,7 +199,9 @@ Pastikan:
   - `pos-platform`
   - `poslive`
 - siapkan MySQL yang stabil
-- siapkan queue worker jika nanti job dipindah async
+- buat satu direktori handoff bersama yang tidak dapat diakses web (permission `0700`), misalnya `/home/ACCOUNT/.tenant-bootstrap-input`; nilai environment platform dan POSLive harus identik
+- atur Cron setiap menit untuk worker onboarding durable: `/usr/local/bin/php /home/ACCOUNT/PATH-PLATFORM/artisan schedule:run >> /dev/null 2>&1`
+- pastikan PHP CLI yang menjalankan Cron dapat membaca dan menghapus file handoff mode `0600`, serta dapat menjalankan command POSLive dari path aplikasi platform
 - siapkan SSL/TLS
 
 #### DNS

@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\Platform\TenantAppBootstrapService;
 use App\Services\Platform\TenantRegistrationService;
 use App\Services\Platform\TenantProvisioningService;
+use App\Services\Platform\TenantOnboardingWorker;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Crypt;
@@ -181,6 +182,31 @@ Artisan::command('platform:resume-tenant-registration {tenant}', function (Tenan
 
     return self::SUCCESS;
 })->purpose('Resume tenant onboarding using the stored platform payload');
+
+Artisan::command('platform:work-tenant-onboarding {--once : Proses maksimal satu tenant} {--max=1 : Maksimum tenant yang diproses} {--tenant= : Batasi ke tenant ID}', function (TenantOnboardingWorker $worker) {
+    $limit = $this->option('once') ? 1 : max(1, (int) $this->option('max'));
+    $tenantId = $this->option('tenant') !== null ? (int) $this->option('tenant') : null;
+    $processed = 0;
+
+    for ($index = 0; $index < $limit; $index++) {
+        $job = $worker->processNext($tenantId);
+
+        if ($job === null) {
+            break;
+        }
+
+        $processed++;
+        $this->line('Onboarding tenant #'.$job->tenant_id.' => '.$job->fresh()->status);
+
+        if ($tenantId !== null) {
+            break;
+        }
+    }
+
+    $this->info('Worker onboarding selesai. Tenant diproses: '.$processed);
+
+    return self::SUCCESS;
+})->purpose('Process durable tenant onboarding jobs using a database lease');
 
 Artisan::command('platform:tenant-host-entry {tenant}', function () {
     $tenantIdentifier = trim((string) $this->argument('tenant'));
@@ -687,3 +713,7 @@ Schedule::command('platform:prune-pending-registrations --hours=72')
 Schedule::command('platform:sync-tenant-lifecycle')
     ->hourly()
     ->description('Sync expired tenant subscriptions and tenant lifecycle status');
+
+Schedule::command('platform:work-tenant-onboarding --once --max=1')
+    ->everyMinute()
+    ->description('Process one durable tenant onboarding job with a database lease');

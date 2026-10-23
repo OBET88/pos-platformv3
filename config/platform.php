@@ -6,6 +6,10 @@ return [
     'tenant_base_domain' => env('PLATFORM_TENANT_BASE_DOMAIN'),
     'tenant_app_path' => env('PLATFORM_TENANT_APP_PATH', realpath(base_path('../poslive')) ?: base_path('../poslive')),
     'tenant_app_php_binary' => env('PLATFORM_TENANT_APP_PHP_BINARY', PHP_BINARY),
+    'tenant_bootstrap_input_directory' => env(
+        'PLATFORM_TENANT_BOOTSTRAP_INPUT_DIRECTORY',
+        dirname(base_path()).DIRECTORY_SEPARATOR.'.tenant-bootstrap-input'
+    ),
     'tenant_app_bootstrap_url' => env('PLATFORM_TENANT_APP_BOOTSTRAP_URL'),
     'tenant_app_bootstrap_token' => env('PLATFORM_TENANT_APP_BOOTSTRAP_TOKEN'),
     'tenant_mysql_host' => env('PLATFORM_TENANT_DB_HOST', '127.0.0.1'),

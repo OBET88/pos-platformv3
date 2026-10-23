@@ -53,6 +53,7 @@ class PlatformDokuWebhookTest extends TestCase
             'type' => 'renewal',
             'payment_method' => 'gateway',
             'payment_provider' => 'doku',
+            'provider_reference' => 'REQ-DOKU-001',
             'amount_subtotal' => 75000,
             'amount_discount' => 0,
             'amount_total' => 75000,
@@ -73,7 +74,7 @@ class PlatformDokuWebhookTest extends TestCase
             ],
         ];
 
-        $this->postJson(route('platform.webhooks.doku.checkout'), $payload)
+        $this->postJson(route('platform.webhooks.doku.checkout'), $payload, $this->dokuSignatureHeaders($payload))
             ->assertOk()
             ->assertJson([
                 'status' => 'processed',
@@ -96,7 +97,7 @@ class PlatformDokuWebhookTest extends TestCase
         $this->assertNotNull($event);
         $this->assertSame('doku', $event->payment_provider);
         $this->assertSame('SUCCESS', $event->event_key);
-        $this->assertFalse((bool) $event->signature_valid);
+        $this->assertTrue((bool) $event->signature_valid);
         $this->assertSame('processed', $event->process_status);
 
         $this->assertDatabaseHas('platform_inbox_items', [
@@ -120,7 +121,9 @@ class PlatformDokuWebhookTest extends TestCase
             ],
         ];
 
-        $this->postJson(route('platform.webhooks.doku.checkout'), $payload)
+        $invoice->forceFill(['provider_reference' => 'REQ-DOKU-FAILED-001'])->save();
+
+        $this->postJson(route('platform.webhooks.doku.checkout'), $payload, $this->dokuSignatureHeaders($payload))
             ->assertOk()
             ->assertJson([
                 'status' => 'processed',
@@ -160,7 +163,9 @@ class PlatformDokuWebhookTest extends TestCase
             ],
         ];
 
-        $this->postJson(route('platform.webhooks.doku.checkout'), $payload)
+        $invoice->forceFill(['provider_reference' => 'REQ-DOKU-EXPIRED-001'])->save();
+
+        $this->postJson(route('platform.webhooks.doku.checkout'), $payload, $this->dokuSignatureHeaders($payload))
             ->assertOk()
             ->assertJson([
                 'status' => 'processed',
@@ -183,6 +188,128 @@ class PlatformDokuWebhookTest extends TestCase
         $this->assertNotNull($event);
         $this->assertSame('EXPIRED', $event->event_key);
         $this->assertSame('processed', $event->process_status);
+    }
+
+    public function test_doku_success_webhook_with_invalid_signature_is_rejected_without_payment_activation(): void
+    {
+        [$tenant, $subscription, $invoice] = $this->seedPendingGatewayInvoice('INV-DOKU-WEBHOOK-INVALID-SIGNATURE');
+
+        $payload = [
+            'order' => [
+                'invoice_number' => $invoice->invoice_number,
+                'status' => 'ORDER_COMPLETED',
+            ],
+            'transaction' => [
+                'status' => 'SUCCESS',
+                'original_request_id' => 'REQ-DOKU-INVALID-SIGNATURE-001',
+            ],
+        ];
+        $this->postJson(route('platform.webhooks.doku.checkout'), $payload, [
+            'Client-Id' => 'test-doku-client',
+            'Request-Id' => 'test-invalid-signature-request',
+            'Request-Timestamp' => '2026-10-23T00:00:00Z',
+            'Signature' => 'HMACSHA256=not-a-valid-signature',
+        ])
+            ->assertUnauthorized()
+            ->assertJson([
+                'status' => 'rejected',
+            ]);
+
+        $invoice->refresh();
+        $tenant->refresh();
+        $subscription->refresh();
+
+        $this->assertSame('pending_payment', $invoice->status);
+        $this->assertNull($invoice->paid_at);
+        $this->assertSame('trial', $tenant->status);
+        $this->assertSame('trial', $subscription->status);
+
+        $event = PlatformPaymentEvent::query()->where('payment_transaction_id', $invoice->id)->firstOrFail();
+
+        $this->assertFalse((bool) $event->signature_valid);
+        $this->assertSame('rejected', $event->process_status);
+        $this->assertSame('DOKU webhook signature is invalid.', $event->failure_reason);
+    }
+
+    public function test_replayed_valid_success_webhook_does_not_extend_subscription_twice(): void
+    {
+        [$tenant, $subscription, $invoice] = $this->seedPendingGatewayInvoice('INV-DOKU-WEBHOOK-REPLAY');
+        $payload = [
+            'order' => ['invoice_number' => $invoice->invoice_number, 'status' => 'ORDER_COMPLETED'],
+            'transaction' => ['status' => 'SUCCESS', 'original_request_id' => 'REQ-DOKU-REPLAY-001'],
+        ];
+        $invoice->forceFill(['provider_reference' => 'REQ-DOKU-REPLAY-001'])->save();
+        $headers = $this->dokuSignatureHeaders($payload);
+
+        $this->postJson(route('platform.webhooks.doku.checkout'), $payload, $headers)->assertOk();
+        $firstExpiry = $subscription->fresh()->expired_at?->toISOString();
+
+        $this->postJson(route('platform.webhooks.doku.checkout'), $payload, $headers)->assertOk();
+
+        $this->assertSame($firstExpiry, $subscription->fresh()->expired_at?->toISOString());
+        $this->assertSame('paid', $invoice->fresh()->status);
+    }
+
+    public function test_valid_late_failed_webhook_does_not_downgrade_paid_invoice(): void
+    {
+        [$tenant, $subscription, $invoice] = $this->seedPendingGatewayInvoice('INV-DOKU-WEBHOOK-LATE-FAILED');
+        $success = [
+            'order' => ['invoice_number' => $invoice->invoice_number, 'status' => 'ORDER_COMPLETED'],
+            'transaction' => ['status' => 'SUCCESS', 'original_request_id' => 'REQ-DOKU-LATE-FAILED-001'],
+        ];
+        $invoice->forceFill(['provider_reference' => 'REQ-DOKU-LATE-FAILED-001'])->save();
+        $failure = [
+            'order' => ['invoice_number' => $invoice->invoice_number, 'status' => 'ORDER_FAILED'],
+            'transaction' => ['status' => 'FAILED', 'original_request_id' => 'REQ-DOKU-LATE-FAILED-001'],
+        ];
+
+        $this->postJson(route('platform.webhooks.doku.checkout'), $success, $this->dokuSignatureHeaders($success))->assertOk();
+        $paidAt = $invoice->fresh()->paid_at?->toISOString();
+        $expiry = $subscription->fresh()->expired_at?->toISOString();
+
+        $this->postJson(route('platform.webhooks.doku.checkout'), $failure, $this->dokuSignatureHeaders($failure))
+            ->assertOk()
+            ->assertJsonPath('status', 'ignored');
+
+        $this->assertSame('paid', $invoice->fresh()->status);
+        $this->assertSame($paidAt, $invoice->fresh()->paid_at?->toISOString());
+        $this->assertSame($expiry, $subscription->fresh()->expired_at?->toISOString());
+        $this->assertDatabaseHas('platform_payment_events', [
+            'payment_transaction_id' => $invoice->id,
+            'event_key' => 'FAILED',
+            'process_status' => 'ignored',
+        ]);
+    }
+
+    /**
+     * Build the headers DOKU signs for a JSON notification.
+     *
+     * The payloads in this test contain no escaped slashes, so Laravel's JSON
+     * request encoder and this canonical JSON representation are identical.
+     */
+    private function dokuSignatureHeaders(array $payload): array
+    {
+        config()->set('services.doku.client_id', 'test-doku-client');
+        config()->set('services.doku.secret_key', 'test-doku-secret');
+
+        $requestId = 'test-doku-request-'.substr(md5(json_encode($payload)), 0, 12);
+        $timestamp = now()->utc()->format('Y-m-d\TH:i:s\Z');
+        $body = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $digest = base64_encode(hash('sha256', $body, true));
+        $components = implode("\n", [
+            'Client-Id:test-doku-client',
+            'Request-Id:'.$requestId,
+            'Request-Timestamp:'.$timestamp,
+            'Request-Target:/webhooks/doku/checkout',
+            'Digest:'.$digest,
+        ]);
+
+        return [
+            'Client-Id' => 'test-doku-client',
+            'Request-Id' => $requestId,
+            'Request-Timestamp' => $timestamp,
+            'Signature' => 'HMACSHA256='.base64_encode(hash_hmac('sha256', $components, 'test-doku-secret', true)),
+        ];
     }
 
     private function seedPendingGatewayInvoice(string $invoiceNumber): array
