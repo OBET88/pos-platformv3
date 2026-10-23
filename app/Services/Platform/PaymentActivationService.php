@@ -16,8 +16,7 @@ class PaymentActivationService
         private readonly TenantAuditLogger $auditLogger,
         private readonly PlatformInboxPublisher $inboxPublisher,
         private readonly TenantRegistrationService $tenantRegistrationService,
-    ) {
-    }
+    ) {}
 
     public function markAsPaid(
         PlatformPaymentTransaction $transaction,
@@ -169,6 +168,15 @@ class PaymentActivationService
             return $transaction->expires_at->copy();
         }
 
+        // Downgrade: masa aktif DIPERTAHANKAN (pelanggan sudah bayar periode ini).
+        if (
+            $transaction->type === 'downgrade'
+            && $subscription->exists
+            && $subscription->expiresAt() instanceof Carbon
+        ) {
+            return $subscription->expiresAt()->copy();
+        }
+
         $baseDate = $paidAt->copy();
 
         if (
@@ -204,7 +212,7 @@ class PaymentActivationService
     {
         $tenant = $transaction->tenant?->fresh(['provisionLogs', 'domains']);
 
-        if (!$tenant instanceof Tenant) {
+        if (! $tenant instanceof Tenant) {
             return;
         }
 

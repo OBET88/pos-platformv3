@@ -18,6 +18,7 @@ use App\Livewire\Platform\Admin\PlanMappingPage;
 use App\Livewire\Platform\Admin\PlatformUsersManager;
 use App\Livewire\Platform\Admin\RegistrationSettingsPage;
 use App\Livewire\Platform\Admin\RolesManager;
+use App\Livewire\Platform\Admin\SubscriptionGatewaySettingsPage;
 use App\Livewire\Platform\Admin\TenantManager;
 use App\Livewire\Platform\Admin\TenantPaymentGatewayConfigManager;
 use Illuminate\Support\Facades\Route;
@@ -116,6 +117,9 @@ Route::middleware(['auth', 'platform.admin'])->group(function () {
         Route::get('/settings/registration', RegistrationSettingsPage::class)
             ->middleware('platform.can:manage_settings')
             ->name('settings.registration');
+        Route::get('/settings/subscription-gateway', SubscriptionGatewaySettingsPage::class)
+            ->middleware('platform.can:manage_settings')
+            ->name('settings.subscription-gateway');
         Route::get('/plans/{plan}/mapping', PlanMappingPage::class)
             ->middleware('platform.can:manage_plans')
             ->name('plans.mapping');

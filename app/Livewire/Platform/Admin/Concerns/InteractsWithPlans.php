@@ -26,6 +26,7 @@ trait InteractsWithPlans
         'menu_product_reports' => ['basic_reports'],
         'menu_stock_in' => ['stock'],
         'menu_stock_out' => ['stock'],
+        'menu_purchasing' => ['stock'],
         'menu_marketplace_orders' => ['stock'],
         'menu_stock_conversion' => ['stock'],
         'menu_stock_transfer' => ['stock'],
@@ -315,6 +316,7 @@ trait InteractsWithPlans
                 'audit',
                 'promotions',
                 'priority_support',
+                'menu_tenant_announcements',
             ],
         ],
     ];
@@ -326,6 +328,7 @@ trait InteractsWithPlans
         'menu_product_reports' => 'Rekap Produk',
         'menu_stock_in' => 'Stok Masuk',
         'menu_stock_out' => 'Stok Keluar',
+        'menu_purchasing' => 'Pembelian & Supplier',
         'menu_marketplace_orders' => 'Marketplace',
         'menu_stock_conversion' => 'Konversi / Repack Stok',
         'menu_stock_transfer' => 'Transfer Stok Gudang - Kios',
@@ -363,6 +366,9 @@ trait InteractsWithPlans
         'membership_points' => 'Membership Poin',
         'membership_redeem' => 'Redeem Poin Membership',
         'membership_tier' => 'Tier Membership',
+        'menu_tenant_announcements' => 'Pengumuman Internal Tenant',
+        'menu_table_order_settings' => 'Pengaturan Order Meja (QR)',
+        'qris_dynamic' => 'Pembayaran QRIS Dinamis',
         'subscription_center' => 'Kompatibilitas Lama: Subscription Center',
         'pos' => 'Kompatibilitas Lama: POS / Kasir',
         'stock' => 'Kompatibilitas Lama: Manajemen Stok',
@@ -400,6 +406,7 @@ trait InteractsWithPlans
                 'menu_shift_history_self',
                 'menu_daily_report_self',
                 'menu_tax_reports',
+                'menu_table_order_settings',
             ],
         ],
         'Utama' => [
@@ -410,6 +417,15 @@ trait InteractsWithPlans
             'features' => [
                 'menu_dashboard',
                 'menu_subscription_center',
+            ],
+        ],
+        'Pembayaran' => [
+            'description' => 'Fitur pembayaran digital yang dapat dijual sebagai add-on sesuai kebutuhan tenant.',
+            'badge' => 'Payment Add-on',
+            'business_context' => 'Cocok untuk tenant yang membutuhkan QRIS dinamis pada kasir, order meja, atau preorder.',
+            'sell_when' => 'Aktifkan hanya setelah konfigurasi gateway pembayaran tenant siap digunakan.',
+            'features' => [
+                'qris_dynamic',
             ],
         ],
         'Master Data' => [
@@ -439,6 +455,7 @@ trait InteractsWithPlans
                 'menu_shift_history_admin',
                 'menu_daily_report_admin',
                 'menu_audit_resume',
+                'menu_tenant_announcements',
             ],
         ],
         'Akuntansi' => [

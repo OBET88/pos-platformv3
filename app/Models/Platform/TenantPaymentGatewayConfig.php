@@ -28,7 +28,8 @@ class TenantPaymentGatewayConfig extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'is_default' => 'boolean',
-        'extra_config_encrypted' => 'array',
+        // Catatan: kolom `*_encrypted` menyimpan STRING terenkripsi, bukan JSON.
+        // Jangan di-cast array; dipakai lewat getter yang mendekripsi.
     ];
 
     public function tenant(): BelongsTo

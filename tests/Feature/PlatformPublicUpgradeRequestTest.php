@@ -123,9 +123,12 @@ class PlatformPublicUpgradeRequestTest extends TestCase
         $this->assertSame($tenant->id, $invoice->tenant_id);
         $this->assertSame($subscription->id, $invoice->subscription_id);
         $this->assertSame($plus->id, $invoice->plan_id);
-        $this->assertSame(450000.0, (float) $invoice->amount_total);
+        // Prorata quarterly: target 250.000×3=750.000 − potongan 100.000×(10/90)≈11.000 = 739.000.
+        $this->assertSame(739000.0, (float) $invoice->amount_total);
+        $this->assertSame(750000.0, (float) $invoice->amount_subtotal);
+        $this->assertSame(11000.0, (float) $invoice->amount_discount);
         $this->assertSame('public_upgrade', $invoice->meta_json['created_via'] ?? null);
-        $this->assertSame('plan_difference', $invoice->meta_json['pricing_mode'] ?? null);
+        $this->assertSame('plan_difference_prorata', $invoice->meta_json['pricing_mode'] ?? null);
         $this->assertSame($basic->id, $invoice->meta_json['current_plan_id'] ?? null);
         $this->assertSame($plus->id, $invoice->meta_json['selected_plan_id'] ?? null);
         $this->assertDatabaseHas('platform_inbox_items', [

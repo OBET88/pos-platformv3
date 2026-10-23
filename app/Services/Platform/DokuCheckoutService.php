@@ -15,8 +15,7 @@ class DokuCheckoutService
 {
     public function __construct(
         private readonly HttpFactory $http,
-    ) {
-    }
+    ) {}
 
     public function createCheckout(PlatformPaymentTransaction $transaction): array
     {
@@ -53,7 +52,7 @@ class DokuCheckoutService
             ?? Arr::get($body, 'payment.url')
             ?? Arr::get($body, 'payment_url');
 
-        if (!is_string($paymentUrl) || trim($paymentUrl) === '') {
+        if (! is_string($paymentUrl) || trim($paymentUrl) === '') {
             throw new RuntimeException('DOKU Checkout tidak mengembalikan payment URL yang valid.');
         }
 
@@ -91,7 +90,7 @@ class DokuCheckoutService
 
         $payload = json_decode($rawBody, true);
 
-        if (!is_array($payload)) {
+        if (! is_array($payload)) {
             return false;
         }
 
@@ -182,7 +181,7 @@ class DokuCheckoutService
 
     private function resolvePaymentDueMinutes(PlatformPaymentTransaction $transaction): int
     {
-        if (!$transaction->due_at instanceof Carbon) {
+        if (! $transaction->due_at instanceof Carbon) {
             return 60;
         }
 
@@ -234,12 +233,12 @@ class DokuCheckoutService
 
     private function guardConfigured(array $config): void
     {
-        if (!(bool) ($config['enabled'] ?? false)) {
+        if (! (bool) ($config['enabled'] ?? false)) {
             throw new RuntimeException('Integrasi DOKU belum diaktifkan di konfigurasi.');
         }
 
         foreach (['client_id', 'secret_key', 'base_url'] as $key) {
-            if (!is_string($config[$key] ?? null) || trim((string) $config[$key]) === '') {
+            if (! is_string($config[$key] ?? null) || trim((string) $config[$key]) === '') {
                 throw new RuntimeException('Konfigurasi DOKU belum lengkap untuk field `'.$key.'`.');
             }
         }
@@ -259,9 +258,7 @@ class DokuCheckoutService
 
     private function config(): array
     {
-        /** @var array $config */
-        $config = config('services.doku', []);
-
-        return $config;
+        // Utamakan konfigurasi dari panel admin platform (DB); fallback ke .env.
+        return app(PlatformDokuConfig::class)->resolve();
     }
 }

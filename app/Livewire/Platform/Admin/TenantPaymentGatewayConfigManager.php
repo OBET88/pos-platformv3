@@ -123,24 +123,36 @@ class TenantPaymentGatewayConfigManager extends Component
                 ->update(['is_default' => false]);
         }
 
-        $config = TenantPaymentGatewayConfig::query()->updateOrCreate(
-            ['id' => $this->editingId ?? 0],
-            [
-                'tenant_id' => $tenant->id,
-                'provider' => $validated['provider'],
-                'mode' => $validated['mode'],
-                'client_id_encrypted' => $validated['client_id'] ?? '',
-                'secret_key_encrypted' => $validated['secret_key'] ?? '',
-                'merchant_id_encrypted' => $validated['merchant_id'] ?? null,
-                'merchant_name' => $validated['merchant_name'] ?? null,
-                'callback_url_encrypted' => $validated['callback_url'] ?? null,
-                'extra_config_encrypted' => $validated['extra_config'] ?? [],
-                'is_active' => $validated['is_active'] ?? true,
-                'is_default' => $validated['is_default'] ?? false,
-                'created_by' => auth()->id(),
-                'updated_by' => auth()->id(),
-            ]
-        );
+        $config = $this->editingId
+            ? TenantPaymentGatewayConfig::query()->findOrFail($this->editingId)
+            : new TenantPaymentGatewayConfig;
+
+        $config->fill([
+            'tenant_id' => $tenant->id,
+            'provider' => $validated['provider'],
+            'mode' => $validated['mode'],
+            'merchant_name' => $validated['merchant_name'] ?? null,
+            'is_active' => $validated['is_active'] ?? true,
+            'is_default' => $validated['is_default'] ?? false,
+            'created_by' => $config->exists ? $config->created_by : auth()->id(),
+            'updated_by' => auth()->id(),
+        ]);
+
+        // Nilai sensitif WAJIB lewat mutator model agar terenkripsi (bukan plaintext).
+        // Saat edit, biarkan kosong berarti "tidak diubah".
+        if (! $this->editingId || ($validated['client_id'] ?? '') !== '') {
+            $config->client_id = (string) ($validated['client_id'] ?? '');
+        }
+
+        if (! $this->editingId || ($validated['secret_key'] ?? '') !== '') {
+            $config->secret_key = (string) ($validated['secret_key'] ?? '');
+        }
+
+        $config->merchant_id = (string) ($validated['merchant_id'] ?? '');
+        $config->callback_url = (string) ($validated['callback_url'] ?? '');
+        $config->extra_config = is_array($validated['extra_config'] ?? null) ? $validated['extra_config'] : [];
+
+        $config->save();
 
         $this->resetForm();
         $this->dispatch('notify', type: 'success', message: 'Konfigurasi gateway '.($this->editingId ? 'diperbarui' : 'ditambahkan').'.');

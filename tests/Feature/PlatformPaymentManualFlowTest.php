@@ -3,11 +3,11 @@
 namespace Tests\Feature;
 
 use App\Livewire\Platform\Admin\PaymentValidationManager;
-use App\Models\Platform\InboxItem;
+use App\Livewire\Platform\Admin\TenantManager;
 use App\Models\Platform\Plan;
 use App\Models\Platform\PlatformPaymentProof;
-use App\Models\Platform\PlatformSetting;
 use App\Models\Platform\PlatformPaymentTransaction;
+use App\Models\Platform\PlatformSetting;
 use App\Models\Platform\Subscription;
 use App\Models\Platform\Tenant;
 use App\Models\User;
@@ -393,7 +393,7 @@ class PlatformPaymentManualFlowTest extends TestCase
 
         Livewire::test(PaymentValidationManager::class); // warm auth/livewire context
 
-        \Livewire\Livewire::test(\App\Livewire\Platform\Admin\TenantManager::class)
+        Livewire::test(TenantManager::class)
             ->call('selectTenant', $tenant->id)
             ->set('selectedPlanId', (string) $plus->id)
             ->set('paymentType', 'upgrade')
@@ -408,8 +408,11 @@ class PlatformPaymentManualFlowTest extends TestCase
 
         $this->assertSame('upgrade', $invoice->type);
         $this->assertSame($plus->id, $invoice->plan_id);
+        // Prorata: 250.000 − potongan penuh sisa 30 hari (100.000) = 150.000.
         $this->assertSame(150000.0, (float) $invoice->amount_total);
-        $this->assertSame('plan_difference', $invoice->meta_json['pricing_mode'] ?? null);
+        $this->assertSame(250000.0, (float) $invoice->amount_subtotal);
+        $this->assertSame(100000.0, (float) $invoice->amount_discount);
+        $this->assertSame('plan_difference_prorata', $invoice->meta_json['pricing_mode'] ?? null);
         $this->assertSame($basic->id, $invoice->meta_json['current_plan_id'] ?? null);
         $this->assertSame($plus->id, $invoice->meta_json['selected_plan_id'] ?? null);
         $this->assertSame($subscription->id, $invoice->subscription_id);

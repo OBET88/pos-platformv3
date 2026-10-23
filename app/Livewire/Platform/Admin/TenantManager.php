@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Platform\Admin;
 
+use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use App\Mail\PlatformRegistrationVerification;
 use App\Models\Platform\InboxItem;
 use App\Models\Platform\PendingRegistration;
@@ -19,6 +20,7 @@ use App\Services\Platform\TenantAuditLogger;
 use App\Services\Platform\TenantLifecycleSyncService;
 use App\Services\Platform\TenantProvisioningService;
 use App\Services\Platform\TenantStatusGuard;
+use App\Support\Billing\SubscriptionBilling;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -27,7 +29,6 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
-use App\Livewire\Platform\Admin\Concerns\AuthorizesPlatformAdmin;
 use Livewire\Component;
 use Livewire\WithPagination;
 use RuntimeException;
@@ -527,8 +528,23 @@ class TenantManager extends Component
         }
 
         $latestSubscription = $tenant->subscriptions()->latest('id')->first();
-        $amount = $this->resolvePaymentAmount($validated['paymentType'], $validated['paymentBillingCycle'], $plan, $latestSubscription);
+        $pricing = $this->resolvePaymentAmount($validated['paymentType'], $validated['paymentBillingCycle'], $plan, $latestSubscription);
+        $amount = (float) $pricing['amount'];
         $invoiceNumber = $this->generateInvoiceNumber($tenant);
+
+        $isUpgrade = $validated['paymentType'] === 'upgrade';
+        $isDowngrade = $validated['paymentType'] === 'downgrade';
+
+        // Downgrade mempertahankan masa aktif; upgrade mulai siklus baru; renewal menambah.
+        $resultingExpiresAt = match (true) {
+            $isUpgrade => SubscriptionBilling::changeExpiresAt(now(), (string) $validated['paymentBillingCycle']),
+            $isDowngrade => $latestSubscription?->expiresAt() ?? now(),
+            default => SubscriptionBilling::renewalExpiresAt(
+                $latestSubscription?->expiresAt(),
+                now(),
+                (string) $validated['paymentBillingCycle'],
+            ),
+        };
 
         $transaction = PlatformPaymentTransaction::query()->create([
             'tenant_id' => $tenant->getKey(),
@@ -538,8 +554,8 @@ class TenantManager extends Component
             'type' => $validated['paymentType'],
             'payment_method' => 'manual_transfer',
             'payment_channel' => 'bank_transfer',
-            'amount_subtotal' => $amount,
-            'amount_discount' => 0,
+            'amount_subtotal' => (float) $pricing['target'],
+            'amount_discount' => (float) $pricing['credit'],
             'amount_total' => $amount,
             'billing_cycle' => $validated['paymentBillingCycle'],
             'status' => 'pending_payment',
@@ -548,9 +564,11 @@ class TenantManager extends Component
             'meta_json' => [
                 'created_via' => 'platform_admin',
                 'plan_name' => $plan->name,
-                'pricing_mode' => $validated['paymentType'] === 'upgrade' ? 'plan_difference' : 'manual_or_standard',
+                'pricing_mode' => $isUpgrade ? 'plan_difference_prorata' : 'manual_or_standard',
                 'selected_plan_id' => $plan->getKey(),
                 'current_plan_id' => $latestSubscription?->plan_id,
+                'upgrade_credit' => $pricing['credit'] > 0 ? (float) $pricing['credit'] : null,
+                'resulting_expires_at' => $resultingExpiresAt->toDateTimeString(),
             ],
         ]);
 
@@ -776,17 +794,20 @@ class TenantManager extends Component
         }
 
         $latestSubscription = $tenant->subscriptions()->with('plan')->latest('id')->first();
-        $amount = $this->resolvePaymentAmount(
+        $pricing = $this->resolvePaymentAmount(
             $this->paymentType,
             $this->paymentBillingCycle,
             $plan,
             $latestSubscription
         );
 
-        $this->paymentAmount = number_format($amount, 0, '.', '');
+        $this->paymentAmount = number_format((float) $pricing['amount'], 0, '.', '');
     }
 
-    private function resolvePaymentAmount(string $paymentType, string $billingCycle, Plan $targetPlan, ?Subscription $latestSubscription): float
+    /**
+     * @return array{amount: float, credit: float, target: float}
+     */
+    private function resolvePaymentAmount(string $paymentType, string $billingCycle, Plan $targetPlan, ?Subscription $latestSubscription): array
     {
         $multiplier = match ($billingCycle) {
             'quarterly' => 3,
@@ -794,15 +815,24 @@ class TenantManager extends Component
             default => 1,
         };
 
-        $targetAmount = (float) $targetPlan->price * $multiplier;
+        $target = (float) $targetPlan->price * $multiplier;
 
-        if ($paymentType !== 'upgrade') {
-            return $targetAmount;
+        // Downgrade: tanpa biaya (pelanggan hanya pindah ke paket lebih murah).
+        if ($paymentType === 'downgrade') {
+            return ['amount' => 0.0, 'credit' => 0.0, 'target' => 0.0];
         }
 
-        $currentPlanAmount = (float) ($latestSubscription?->plan?->price ?? 0) * $multiplier;
+        if ($paymentType !== 'upgrade') {
+            return ['amount' => $target, 'credit' => 0.0, 'target' => $target];
+        }
 
-        return max(0, $targetAmount - $currentPlanAmount);
+        return SubscriptionBilling::upgradeAmount(
+            (float) ($latestSubscription?->plan?->price ?? 0),
+            (float) $targetPlan->price,
+            $latestSubscription?->expiresAt(),
+            now(),
+            $billingCycle,
+        );
     }
 
     public function filteredPaymentTransactions(?Tenant $tenant): Collection
