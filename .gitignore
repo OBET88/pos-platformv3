@@ -30,6 +30,9 @@ pos-platform.zip
 # File sensitif lokal - tidak untuk repo publik
 DB/.envEE
 DB/.envlptop1
+# .env & salinan kredensial/DB online - mengandung APP_KEY, DB pass, DOKU secret
+DB/envee/
+DB/DB ONLINE/
 docs/doc-migrate-db.php
 
 # Catatan & file kerja sementara

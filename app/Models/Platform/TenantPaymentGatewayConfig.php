@@ -79,22 +79,54 @@ class TenantPaymentGatewayConfig extends Model
 
     public function getClientId(): string
     {
-        return $this->client_id_encrypted ? Crypt::decryptString($this->client_id_encrypted) : '';
+        if (! $this->client_id_encrypted) {
+            return '';
+        }
+
+        try {
+            return Crypt::decryptString($this->client_id_encrypted);
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     public function getSecretKey(): string
     {
-        return $this->secret_key_encrypted ? Crypt::decryptString($this->secret_key_encrypted) : '';
+        if (! $this->secret_key_encrypted) {
+            return '';
+        }
+
+        try {
+            return Crypt::decryptString($this->secret_key_encrypted);
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     public function getMerchantId(): string
     {
-        return $this->merchant_id_encrypted ? Crypt::decryptString($this->merchant_id_encrypted) : '';
+        if (! $this->merchant_id_encrypted) {
+            return '';
+        }
+
+        try {
+            return Crypt::decryptString($this->merchant_id_encrypted);
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     public function getCallbackUrl(): string
     {
-        return $this->callback_url_encrypted ? Crypt::decryptString($this->callback_url_encrypted) : '';
+        if (! $this->callback_url_encrypted) {
+            return '';
+        }
+
+        try {
+            return Crypt::decryptString($this->callback_url_encrypted);
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     public function getExtraConfig(): array

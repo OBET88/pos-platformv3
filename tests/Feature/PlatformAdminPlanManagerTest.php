@@ -203,6 +203,7 @@ class PlatformAdminPlanManagerTest extends TestCase
                 'pos',
                 'stock',
                 'basic_reports',
+                'menu_stock_waste',
             ]);
     }
 
