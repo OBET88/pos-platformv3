@@ -11,6 +11,7 @@ use App\Models\Platform\Tenant;
 use App\Services\Platform\PendingRegistrationService;
 use App\Services\Platform\PlatformInboxPublisher;
 use App\Services\Platform\PlatformSettings;
+use App\Services\Platform\TenantDomainSuggestionService;
 use App\Services\Platform\TenantRegistrationService;
 use App\Services\Platform\TenantOnboardingDispatcher;
 use Illuminate\Http\JsonResponse;
@@ -459,6 +460,9 @@ class PlatformRegistrationController extends Controller
             'business_name' => ['nullable', 'string', 'max:255'],
             'branch_name' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            // Draft boleh belum tervalidasi penuh — validasi lengkap
+            // (regex, reserved, unique) di `validateRegistration()` saat submit.
+            'tenant_code' => ['nullable', 'string', 'max:20'],
         ]);
 
         $payload = collect($validated)
@@ -698,10 +702,22 @@ class PlatformRegistrationController extends Controller
             'branch_name' => ['required', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'registration_draft_token' => ['nullable', 'string', 'max:255'],
+            'tenant_code' => [
+                'nullable',
+                'string',
+                'min:3',
+                'max:20',
+                'regex:/^[a-z0-9](?:[a-z0-9-]{1,18}[a-z0-9])?$/',
+                Rule::notIn(TenantDomainSuggestionService::RESERVED_TENANT_CODES),
+                Rule::unique('tenants', 'code'),
+            ],
         ], [
             'owner_email.unique' => 'Email owner ini sudah dipakai oleh tenant yang sudah terdaftar. Gunakan email lain atau masuk ke tenant yang sudah ada.',
             'plan_code.exists' => 'Paket yang dipilih tidak tersedia lagi. Silakan pilih paket aktif lainnya.',
             'plan_code.in' => 'Paket ini sedang tidak dibuka untuk pendaftaran baru. Silakan pilih paket lain yang tersedia.',
+            'tenant_code.regex' => 'Kode subdomain hanya boleh huruf kecil, angka, dan tanda hubung (tanpa di awal/akhir).',
+            'tenant_code.not_in' => 'Kode subdomain ini cadangan/terlarang. Pilih kode lain.',
+            'tenant_code.unique' => 'Kode subdomain sudah dipakai. Pilih kode lain.',
         ]);
     }
 

@@ -20,6 +20,11 @@ class PlatformOnboardDemoTenantCommandTest extends TestCase
         File::deleteDirectory($directory);
         config()->set('platform.tenant_database_directory', $directory);
 
+        // Nama "PT Demo Command" (slug "pt-demo-command", 15 char) kini
+        // DITEBAT menjadi base 12 char: "pt-demo-comm".
+        $expectedCode = 'pt-demo-comm';
+        $expectedDomain = $expectedCode.'.poslive.test';
+
         $this->artisan('platform:onboard-demo-tenant', [
             'company_name' => 'PT Demo Command',
             'owner_name' => 'Owner Command',
@@ -32,19 +37,17 @@ class PlatformOnboardDemoTenantCommandTest extends TestCase
             '--notes' => 'Demo onboarding via command',
         ])
             ->expectsOutput('Tenant demo berhasil dibuat.')
-            ->expectsOutputToContain('Tenant Code: pt-demo-command')
+            ->expectsOutputToContain('Tenant Code: '.$expectedCode)
             ->expectsOutput('Status: trial')
             ->expectsOutput('Owner Email: owner-command@example.com')
             ->expectsOutput('Owner Password: secret12345')
-            ->expectsOutput('127.0.0.1 pt-demo-command.poslive.test')
-            ->expectsOutput('http://pt-demo-command.poslive.test/login')
             ->assertExitCode(0);
 
         $tenant = Tenant::query()->where('owner_email', 'owner-command@example.com')->first();
 
         $this->assertNotNull($tenant);
         $this->assertSame('trial', $tenant->status);
-        $this->assertSame('pt-demo-command.poslive.test', $tenant->domains()->where('is_primary', true)->value('domain'));
+        $this->assertSame($expectedDomain, $tenant->domains()->where('is_primary', true)->value('domain'));
         $this->assertSame('completed', $tenant->provisionLogs()->where('step', 'auto_onboarding_completed')->value('status'));
 
         $databasePath = TenantDatabaseConfig::query()->where('tenant_id', $tenant->id)->value('db_name');

@@ -51,7 +51,7 @@ class TenantRegistrationService
                 ->firstOrFail();
 
             $tenant = Tenant::query()->create([
-                'code' => $this->generateTenantCode($payload['company_name']),
+                'code' => $this->resolveTenantCode($payload),
                 'name' => trim($payload['company_name']),
                 'owner_name' => trim($payload['owner_name']),
                 'owner_email' => Str::lower(trim($payload['owner_email'])),
@@ -162,7 +162,7 @@ class TenantRegistrationService
                 ->firstOrFail();
 
             $tenant = Tenant::query()->create([
-                'code' => $this->generateTenantCode($payload['company_name']),
+                'code' => $this->resolveTenantCode($payload),
                 'name' => trim($payload['company_name']),
                 'owner_name' => trim($payload['owner_name']),
                 'owner_email' => $ownerEmail,
@@ -769,23 +769,61 @@ class TenantRegistrationService
         throw $lastException ?? new RuntimeException('Auto onboarding tenant gagal tanpa error eksplisit.');
     }
 
+    /**
+     * Opsi A (keputusan Bos Robert 2026-10-31): tenant boleh mengisi kode
+     * subdomain manual (`tenant_code`, opsional). Bila terisi & legal, kode
+     * itu dipakai apa adanya TANPA suffix — validasi unik/reserved sudah
+     * dijaga di form (validateRegistration) dan di sini (guard kedua).
+     * Bila kosong, fallback ke slug auto dari nama perusahaan.
+     */
+    private function resolveTenantCode(array $payload): string
+    {
+        $manualCode = strtolower(trim((string) ($payload['tenant_code'] ?? '')));
+
+        if ($manualCode !== '') {
+            // Guard kedua: reserved/ilegal ditolak sebelum tenant dibuat,
+            // walau form sudah validasi (mis. payload dari draft lama).
+            $this->tenantDomainSuggestionService->assertTenantCodeIsUsable($manualCode);
+
+            if (Tenant::query()->where('code', $manualCode)->exists()) {
+                throw new RuntimeException(sprintf(
+                    'Kode subdomain "%s" sudah dipakai tenant lain. Pilih kode lain.',
+                    $manualCode,
+                ));
+            }
+
+            return $manualCode;
+        }
+
+        return $this->generateTenantCode((string) $payload['company_name']);
+    }
+
     private function generateTenantCode(string $companyName): string
     {
-        $base = Str::of($companyName)
-            ->lower()
-            ->replaceMatches('/[^a-z0-9]+/', '-')
-            ->trim('-')
-            ->substr(0, 18)
-            ->value();
+        // Batasi base slug auto 12 karakter (bukan 18) agar nama panjang
+        // (mis. "PT Berkah Sinar Jaya" → "pt-berkah-si") menghasilkan kode
+        // pendek. Str::slug() sudah lowercase + ganti separator '-' + strip
+        // karakter non-alfanumerik; rtrim '-' karena substr(0,12) bisa memotong
+        // di tengah kata sehingga menghasilkan akhiran hyphen (ilegal per
+        // assertTenantCodeIsUsable). Suffix bentrok: 8 char awal base (rtrim
+        // '-') + "-N" → total selalu <= 20 (batas maks kode subdomain).
+        $base = rtrim(substr(Str::slug($companyName), 0, 12), '-');
 
         $base = $base !== '' ? $base : 'tenant';
         $candidate = $base;
         $counter = 1;
 
         while (Tenant::query()->where('code', $candidate)->exists()) {
-            $candidate = Str::limit($base, 14, '') . '-' . $counter;
+            $suffixedBase = rtrim(substr($base, 0, 8), '-');
+            $candidate = $suffixedBase !== '' ? $suffixedBase.'-'.$counter : 'tenant-'.$counter;
             $counter++;
         }
+
+        // Release blocker wildcard DNS (worksheet deploy IDwebhost §4): tolak kode yang
+        // bentrok dengan host eksplisit/reserved (resto, mm, www, cpanel, dll.).
+        // Tanpa ini, nama usaha "resto" akan membuat tenant `resto` dan host
+        // resto.<base_domain> akan menabrak host platform eksplisit.
+        $this->tenantDomainSuggestionService->assertTenantCodeIsUsable($candidate);
 
         return $candidate;
     }

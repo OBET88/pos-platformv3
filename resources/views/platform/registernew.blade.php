@@ -1062,6 +1062,13 @@
                         </div>
 
                         <div class="form-input">
+                            <label for="tenant_code">Kode Subdomain (opsional)</label>
+                            <input id="tenant_code" type="text" name="tenant_code" value="{{ old('tenant_code') }}" placeholder="berkah" maxlength="20" pattern="[a-z0-9]([a-z0-9-]{1,18}[a-z0-9])?">
+                            <div class="field-hint">Biarkan kosong untuk dibuat otomatis dari nama perusahaan. Contoh: berkah</div>
+                            @error('tenant_code')<small class="field-error">{{ $message }}</small>@enderror
+                        </div>
+
+                        <div class="form-input">
                             <label for="plan_code">Paket</label>
                             <select id="plan_code" name="plan_code" required>
                                 <option value="">Pilih paket</option>
